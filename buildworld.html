@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BuildWorld - Creative Sandbox</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:100%; height:100%; overflow:hidden; font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#fff; touch-action:none; user-select:none; -webkit-user-select:none; }
+
+/* Start Screen */
+#startScreen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:linear-gradient(135deg,#0f0c29,#302b63,#24243e); }
+#startScreen h1 { font-size:3em; margin-bottom:0.2em; animation:floatTitle 3s ease-in-out infinite; }
+@keyframes floatTitle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+#startScreen .subtitle { color:#aaa; margin-bottom:2em; font-size:1.1em; }
+#startScreen button { padding:14px 48px; font-size:1.2em; border:none; border-radius:12px; cursor:pointer; margin:8px; transition:transform .2s,box-shadow .2s; }
+#startScreen button:hover { transform:scale(1.05); }
+.btn-play { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; }
+.btn-load { background:linear-gradient(135deg,#00b894,#55efc4); color:#fff; }
+.btn-clear { background:linear-gradient(135deg,#d63031,#ff7675); color:#fff; font-size:0.9em!important; padding:10px 30px!important; }
+
+/* Game UI */
+#gameUI { display:none; position:fixed; inset:0; z-index:10; pointer-events:none; }
+#gameUI > * { pointer-events:auto; }
+
+/* Top bar */
+#topBar { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); }
+#topBar button { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.2); color:#fff; padding:6px 14px; border-radius:8px; cursor:pointer; font-size:0.9em; transition:background .2s; }
+#topBar button:hover { background:rgba(255,255,255,0.3); }
+#topBar button:disabled { opacity:0.4; cursor:default; }
+#coordDisplay { font-size:0.85em; color:#aaa; }
+
+/* Palette */
+#palette { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(10px); border-top:1px solid rgba(255,255,255,0.1); max-height:45vh; transition:max-height .3s; }
+#palette.collapsed { max-height:40px; }
+#paletteHeader { display:flex; align-items:center; padding:6px 12px; cursor:pointer; }
+#paletteHeader h3 { flex:1; font-size:0.95em; }
+#categoryTabs { display:flex; gap:4px; padding:4px 12px; overflow-x:auto; scrollbar-width:none; }
+#categoryTabs::-webkit-scrollbar { display:none; }
+.cat-tab { padding:4px 12px; border-radius:16px; background:rgba(255,255,255,0.1); border:none; color:#ccc; cursor:pointer; font-size:0.8em; white-space:nowrap; transition:all .2s; }
+.cat-tab.active { background:#6c5ce7; color:#fff; }
+#blockGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(52px,1fr)); gap:4px; padding:8px 12px; max-height:32vh; overflow-y:auto; scrollbar-width:thin; }
+.block-item { width:48px; height:48px; display:flex; align-items:center; justify-content:center; font-size:1.6em; border-radius:8px; cursor:pointer; border:2px solid transparent; transition:all .15s; position:relative; background:rgba(255,255,255,0.05); }
+.block-item:hover { background:rgba(255,255,255,0.15); transform:scale(1.1); }
+.block-item.selected { border-color:#6c5ce7; background:rgba(108,92,231,0.2); box-shadow:0 0 10px rgba(108,92,231,0.5); }
+.block-item .tooltip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.6em; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .2s; }
+.block-item:hover .tooltip { opacity:1; }
+
+/* Minimap */
+#minimap { position:absolute; top:50px; right:10px; width:140px; height:140px; border:2px solid rgba(255,255,255,0.3); border-radius:8px; overflow:hidden; background:rgba(0,0,0,0.5); }
+#minimapCanvas { width:100%; height:100%; }
+
+/* Day/Night toggle */
+#dayNightBtn { position:absolute; top:50px; left:10px; width:44px; height:44px; border-radius:50%; background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.2); font-size:1.4em; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .3s; }
+
+/* Canvas */
+#gameCanvas { display:block; width:100%; height:100%; }
+
+/* Placement animation */
+@keyframes blockPopIn { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.3)} 100%{transform:scale(1);opacity:1} }
+@keyframes blockDestroy { 0%{transform:scale(1);opacity:1} 100%{transform:scale(0);opacity:0} }
+.pop-in { animation:blockPopIn .25s ease-out; }
+.pop-out { animation:blockDestroy .2s ease-in forwards; }
+
+/* Particles */
+@keyframes particleFly { 0%{transform:translate(0,0) scale(1);opacity:1} 100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0} }
+.particle { position:absolute; width:6px; height:6px; border-radius:50%; pointer-events:none; animation:particleFly .5s ease-out forwards; }
+
+/* Day/night transition */
+.day-mode { transition:background-color 2s ease; }
+.night-mode { transition:background-color 2s ease; }
+
+/* Save indicator */
+#saveIndicator { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.8); color:#00b894; padding:10px 24px; border-radius:8px; font-size:1em; opacity:0; transition:opacity .3s; pointer-events:none; }
+#saveIndicator.show { opacity:1; }
+
+/* Responsive */
+@media(max-width:600px) {
+  #startScreen h1 { font-size:2em; }
+  .block-item { width:42px; height:42px; font-size:1.3em; }
+  #minimap { width:100px; height:100px; }
+}
+</style>
+</head>
+<body>
+<!-- Start Screen -->
+<div id="startScreen">
+  <h1>🏗️ BuildWorld</h1>
+  <p class="subtitle">Create your own world, block by block</p>
+  <button class="btn-play" onclick="startGame(false)">🎮 New World</button>
+  <button class="btn-load" onclick="startGame(true)">📂 Load World</button>
+  <button class="btn-clear" onclick="clearSave()">🗑️ Clear Save</button>
+</div>
+
+<!-- Game -->
+<canvas id="gameCanvas"></canvas>
+<div id="gameUI">
+  <div id="topBar">
+    <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
+    <span id="coordDisplay">0, 0</span>
+    <div style="display:flex;gap:6px;">
+      <button onclick="saveWorld()">💾 Save</button>
+      <button onclick="goToStart()">🏠 Menu</button>
+    </div>
+  </div>
+  <button id="dayNightBtn" onclick="toggleDayNight()">🌞</button>
+  <div id="minimap"><canvas id="minimapCanvas" width="140" height="140"></canvas></div>
+  <div id="saveIndicator">✅ World Saved!</div>
+  <div id="palette">
+    <div id="paletteHeader" onclick="togglePalette()">
+      <h3>🧱 Block Palette</h3>
+      <span id="paletteToggle">▼</span>
+    </div>
+    <div id="categoryTabs"></div>
+    <div id="blockGrid"></div>
+  </div>
+</div>
+
+<script>
+// ===== BLOCK DEFINITIONS (100+ types) =====
+const BLOCKS = [
+  // Terrain
+  {id:0,emoji:'🟩',name:'Grass',cat:'Terrain',color:'#4a7c3f'},
+  {id:1,emoji:'🟫',name:'Dirt',cat:'Terrain',color:'#8B6914'},
+  {id:2,emoji:'⬛',name:'Stone',cat:'Terrain',color:'#808080'},
+  {id:3,emoji:'🟨',name:'Sand',cat:'Terrain',color:'#f0d060'},
+  {id:4,emoji:'🪨',name:'Boulder',cat:'Terrain',color:'#696969'},
+  {id:5,emoji:'🏔️',name:'Mountain',cat:'Terrain',color:'#a0a0a0'},
+  {id:6,emoji:'❄️',name:'Snow',cat:'Terrain',color:'#e8e8f0'},
+  {id:7,emoji:'🟤',name:'Mud',cat:'Terrain',color:'#654321'},
+  {id:8,emoji:'🔶',name:'Clay',cat:'Terrain',color:'#b5651d'},
+  {id:9,emoji:'🪹',name:'Gravel',cat:'Terrain',color:'#9a9a9a'},
+  {id:10,emoji:'🧊',name:'Ice',cat:'Terrain',color:'#a8d8ea'},
+  {id:11,emoji:'🌋',name:'Lava',cat:'Terrain',color:'#ff4500'},
+  {id:12,emoji:'🟧',name:'Copper',cat:'Terrain',color:'#b87333'},
+  {id:13,emoji:'⬜',name:'Marble',cat:'Terrain',color:'#f5f5f5'},
+  {id:14,emoji:'🪵',name:'Packed Earth',cat:'Terrain',color:'#5c4033'},
+  // Water
+  {id:15,emoji:'🌊',name:'Water',cat:'Water',color:'#4a90d9'},
+  {id:16,emoji:'💧',name:'Shallow Water',cat:'Water',color:'#74b9ff'},
+  {id:17,emoji:'🏊',name:'Deep Water',cat:'Water',color:'#0984e3'},
+  {id:18,emoji:'🫧',name:'Bubbles',cat:'Water',color:'#81ecec'},
+  {id:19,emoji:'💦',name:'Waterfall',cat:'Water',color:'#74b9ff'},
+  {id:20,emoji:'♨️',name:'Hot Spring',cat:'Water',color:'#fd79a8'},
+  // Vegetation
+  {id:21,emoji:'🌳',name:'Oak Tree',cat:'Nature',color:'#2d5016'},
+  {id:22,emoji:'🌲',name:'Pine Tree',cat:'Nature',color:'#1a472a'},
+  {id:23,emoji:'🌴',name:'Palm Tree',cat:'Nature',color:'#27ae60'},
+  {id:24,emoji:'🌵',name:'Cactus',cat:'Nature',color:'#27ae60'},
+  {id:25,emoji:'🌾',name:'Wheat',cat:'Nature',color:'#f1c40f'},
+  {id:26,emoji:'🌻',name:'Sunflower',cat:'Nature',color:'#f39c12'},
+  {id:27,emoji:'🌷',name:'Tulip',cat:'Nature',color:'#e84393'},
+  {id:28,emoji:'🍄',name:'Mushroom',cat:'Nature',color:'#d63031'},
+  {id:29,emoji:'🌿',name:'Fern',cat:'Nature',color:'#00b894'},
+  {id:30,emoji:'🍀',name:'Clover',cat:'Nature',color:'#00cec9'},
+  {id:31,emoji:'🎋',name:'Bamboo',cat:'Nature',color:'#00b894'},
+  {id:32,emoji:'🌺',name:'Hibiscus',cat:'Nature',color:'#e17055'},
+  {id:33,emoji:'🌹',name:'Rose',cat:'Nature',color:'#d63031'},
+  {id:34,emoji:'💐',name:'Flower Bouquet',cat:'Nature',color:'#fd79a8'},
+  {id:35,emoji:'🪻',name:'Lavender',cat:'Nature',color:'#a29bfe'},
+  {id:36,emoji:'🪷',name:'Lotus',cat:'Nature',color:'#fab1a0'},
+  {id:37,emoji:'🎄',name:'Christmas Tree',cat:'Nature',color:'#00b894'},
+  {id:38,emoji:'🍇',name:'Grape Vine',cat:'Nature',color:'#6c5ce7'},
+  {id:39,emoji:'🍓',name:'Strawberry',cat:'Nature',color:'#d63031'},
+  // Buildings
+  {id:40,emoji:'🏠',name:'House',cat:'Buildings',color:'#e17055'},
+  {id:41,emoji:'🏢',name:'Office',cat:'Buildings',color:'#636e72'},
+  {id:42,emoji:'🏫',name:'School',cat:'Buildings',color:'#fdcb6e'},
+  {id:43,emoji:'🏥',name:'Hospital',cat:'Buildings',color:'#ffffff'},
+  {id:44,emoji:'🏦',name:'Bank',cat:'Buildings',color:'#b2bec3'},
+  {id:45,emoji:'🏪',name:'Shop',cat:'Buildings',color:'#00cec9'},
+  {id:46,emoji:'🏬',name:'Mall',cat:'Buildings',color:'#74b9ff'},
+  {id:47,emoji:'🏭',name:'Factory',cat:'Buildings',color:'#636e72'},
+  {id:48,emoji:'🏯',name:'Castle',cat:'Buildings',color:'#dfe6e9'},
+  {id:49,emoji:'⛪',name:'Church',cat:'Buildings',color:'#ffeaa7'},
+  {id:50,emoji:'🕌',name:'Mosque',cat:'Buildings',color:'#55efc4'},
+  {id:51,emoji:'🛕',name:'Temple',cat:'Buildings',color:'#fdcb6e'},
+  {id:52,emoji:'🏛️',name:'Museum',cat:'Buildings',color:'#dfe6e9'},
+  {id:53,emoji:'🏟️',name:'Stadium',cat:'Buildings',color:'#b2bec3'},
+  {id:54,emoji:'🏗️',name:'Construction',cat:'Buildings',color:'#f39c12'},
+  {id:55,emoji:'🗼',name:'Tower',cat:'Buildings',color:'#b2bec3'},
+  {id:56,emoji:'🏰',name:'Fortress',cat:'Buildings',color:'#a0a0a0'},
+  {id:57,emoji:'⛪',name:'Chapel',cat:'Buildings',color:'#ffeaa7'},
+  {id:58,emoji:'🏠',name:'Cabin',cat:'Buildings',color:'#8B6914'},
+  {id:59,emoji:'🏚️',name:'Ruins',cat:'Buildings',color:'#95a5a6'},
+  // Infrastructure
+  {id:60,emoji:'🛤️',name:'Railroad',cat:'Infrastructure',color:'#636e72'},
+  {id:61,emoji:'🛣️',name:'Road',cat:'Infrastructure',color:'#2d3436'},
+  {id:62,emoji:'🌉',name:'Bridge',cat:'Infrastructure',color:'#b2bec3'},
+  {id:63,emoji:'🚧',name:'Barricade',cat:'Infrastructure',color:'#f39c12'},
+  {id:64,emoji:'🚦',name:'Traffic Light',cat:'Infrastructure',color:'#00b894'},
+  {id:65,emoji:'⚓',name:'Dock',cat:'Infrastructure',color:'#8B6914'},
+  {id:66,emoji:'🛬',name:'Runway',cat:'Infrastructure',color:'#636e72'},
+  {id:67,emoji:'⛽',name:'Gas Station',cat:'Infrastructure',color:'#d63031'},
+  {id:68,emoji:'🏕️',name:'Campsite',cat:'Infrastructure',color:'#00b894'},
+  // Decorations
+  {id:69,emoji:'🪧',name:'Sign',cat:'Decor',color:'#8B6914'},
+  {id:70,emoji:'🪑',name:'Chair',cat:'Decor',color:'#b2bec3'},
+  {id:71,emoji:'🪞',name:'Mirror',cat:'Decor',color:'#74b9ff'},
+  {id:72,emoji:'🖼️',name:'Painting',cat:'Decor',color:'#fdcb6e'},
+  {id:73,emoji:'🗿',name:'Moai',cat:'Decor',color:'#95a5a6'},
+  {id:74,emoji:'🗽',name:'Statue',cat:'Decor',color:'#b2bec3'},
+  {id:75,emoji:'🎪',name:'Tent',cat:'Decor',color:'#d63031'},
+  {id:76,emoji:'🎡',name:'Ferris Wheel',cat:'Decor',color:'#0984e3'},
+  {id:77,emoji:'⛲',name:'Fountain',cat:'Decor',color:'#74b9ff'},
+  {id:78,emoji:'🔔',name:'Bell',cat:'Decor',color:'#fdcb6e'},
+  {id:79,emoji:'🎭',name:'Theater',cat:'Decor',color:'#6c5ce7'},
+  {id:80,emoji:'🎪',name:'Circus',cat:'Decor',color:'#e17055'},
+  // Special
+  {id:81,emoji:'⭐',name:'Star',cat:'Special',color:'#f1c40f'},
+  {id:82,emoji:'❤️',name:'Heart',cat:'Special',color:'#d63031'},
+  {id:83,emoji:'💎',name:'Diamond',cat:'Special',color:'#74b9ff'},
+  {id:84,emoji:'🔮',name:'Crystal Ball',cat:'Special',color:'#a29bfe'},
+  {id:85,emoji:'🪄',name:'Magic Wand',cat:'Special',color:'#fdcb6e'},
+  {id:86,emoji:'🎪',name:'Big Top',cat:'Special',color:'#d63031'},
+  {id:87,emoji:'🌈',name:'Rainbow',cat:'Special',color:'#e17055'},
+  {id:88,emoji:'☀️',name:'Sun',cat:'Special',color:'#f1c40f'},
+  {id:89,emoji:'🌙',name:'Moon',cat:'Special',color:'#dfe6e9'},
+  {id:90,emoji:'☁️',name:'Cloud',cat:'Special',color:'#dfe6e9'},
+  // Vehicles
+  {id:91,emoji:'🚗',name:'Car',cat:'Vehicles',color:'#d63031'},
+  {id:92,emoji:'🚂',name:'Train',cat:'Vehicles',color:'#636e72'},
+  {id:93,emoji:'✈️',name:'Airplane',cat:'Vehicles',color:'#dfe6e9'},
+  {id:94,emoji:'🚀',name:'Rocket',cat:'Vehicles',color:'#d63031'},
+  {id:95,emoji:'⛵',name:'Sailboat',cat:'Vehicles',color:'#ffffff'},
+  {id:96,emoji:'🚁',name:'Helicopter',cat:'Vehicles',color:'#636e72'},
+  {id:97,emoji:'🚲',name:'Bicycle',cat:'Vehicles',color:'#2d3436'},
+  {id:98,emoji:'🏍️',name:'Motorcycle',cat:'Vehicles',color:'#d63031'},
+  // Eraser
+  {id:99,emoji:'❌',name:'Eraser',cat:'Tools',color:'#d63031'},
+];
+
+const CATS = [...new Set(BLOCKS.map(b=>b.cat))];
+
+// ===== GAME STATE =====
+const CELL = 32;
+const WORLD_W = 200, WORLD_H = 200;
+let world = {}; // key: "x,y" -> blockId
+let camera = {x:0, y:0};
+let selectedBlock = 0;
+let isNight = false;
+let undoStack = [];
+let redoStack = [];
+let gameStarted = false;
+let paletteCollapsed = false;
+let activeCat = CATS[0];
+
+// Touch/pointer state
+let isDragging = false;
+let isPlacing = false;
+let lastTouch = null;
+let lastPlacedKey = null;
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const miniCanvas = document.getElementById('minimapCanvas');
+const miniCtx = miniCanvas.getContext('2d');
+
+// ===== INITIALIZATION =====
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function startGame(load) {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameUI').style.display = 'block';
+  if (load) loadWorld();
+  else { world = {}; camera = {x:-(WORLD_W*CELL)/2 + canvas.width/2, y:-(WORLD_H*CELL)/2 + canvas.height/2}; }
+  gameStarted = true;
+  buildPalette();
+  requestAnimationFrame(gameLoop);
+}
+
+function goToStart() {
+  document.getElementById('startScreen').style.display = 'flex';
+  document.getElementById('gameUI').style.display = 'none';
+  gameStarted = false;
+}
+
+function clearSave() {
+  localStorage.removeItem('buildworld_save');
+  showIndicator('🗑️ Save Cleared!');
+}
+
+// ===== PALETTE =====
+function buildPalette() {
+  const tabsEl = document.getElementById('categoryTabs');
+  const gridEl = document.getElementById('blockGrid');
+  tabsEl.innerHTML = '';
+  CATS.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-tab' + (cat === activeCat ? ' active' : '');
+    btn.textContent = cat;
+    btn.onclick = () => { activeCat = cat; buildPalette(); };
+    tabsEl.appendChild(btn);
+  });
+  gridEl.innerHTML = '';
+  BLOCKS.filter(b => b.cat === activeCat).forEach(b => {
+    const div = document.createElement('div');
+    div.className = 'block-item' + (b.id === selectedBlock ? ' selected' : '');
+    div.innerHTML = `<span>${b.emoji}</span><span class="tooltip">${b.name}</span>`;
+    div.onclick = () => { selectedBlock = b.id; buildPalette(); };
+    gridEl.appendChild(div);
+  });
+}
+
+function togglePalette() {
+  paletteCollapsed = !paletteCollapsed;
+  document.getElementById('palette').classList.toggle('collapsed', paletteCollapsed);
+  document.getElementById('paletteToggle').textContent = paletteCollapsed ? '▲' : '▼';
+}
+
+// ===== WORLD OPERATIONS =====
+function getBlock(x, y) { return world[x+','+y]; }
+function setBlock(x, y, id) {
+  const key = x+','+y;
+  const prev = world[key];
+  if (id === 99) { // eraser
+    if (prev !== undefined) {
+      undoStack.push({x,y,from:prev,to:undefined});
+      redoStack = [];
+      delete world[key];
+      spawnParticles(x, y, BLOCKS[prev]?.color || '#fff');
+    }
+  } else {
+    undoStack.push({x,y,from:prev,to:id});
+    redoStack = [];
+    world[key] = id;
+  }
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  const a = undoStack.pop();
+  redoStack.push(a);
+  if (a.from === undefined) delete world[a.x+','+a.y];
+  else world[a.x+','+a.y] = a.from;
+  updateUndoRedoBtns();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  const a = redoStack.pop();
+  undoStack.push(a);
+  if (a.to === undefined) delete world[a.x+','+a.y];
+  else world[a.x+','+a.y] = a.to;
+  updateUndoRedoBtns();
+}
+
+function updateUndoRedoBtns() {
+  document.getElementById('undoBtn').disabled = !undoStack.length;
+}
+
+// ===== PARTICLES =====
+const particles = [];
+function spawnParticles(wx, wy, color) {
+  const sx = wx * CELL + camera.x + CELL/2;
+  const sy = wy * CELL + camera.y + CELL/2;
+  for (let i = 0; i < 6; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.cssText = `left:${sx}px;top:${sy}px;background:${color};--px:${(Math.random()-0.5)*60}px;--py:${(Math.random()-0.5)*60}px;`;
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 500);
+  }
+}
+
+// ===== DAY/NIGHT =====
+function toggleDayNight() {
+  isNight = !isNight;
+  document.getElementById('dayNightBtn').textContent = isNight ? '🌙' : '🌞';
+}
+
+// ===== SAVE/LOAD =====
+function saveWorld() {
+  const data = {world, camera, selectedBlock, isNight};
+  localStorage.setItem('buildworld_save', JSON.stringify(data));
+  showIndicator('✅ World Saved!');
+}
+
+function loadWorld() {
+  try {
+    const d = JSON.parse(localStorage.getItem('buildworld_save'));
+    if (d) {
+      world = d.world || {};
+      camera = d.camera || {x:0,y:0};
+      selectedBlock = d.selectedBlock || 0;
+      isNight = !!d.isNight;
+      document.getElementById('dayNightBtn').textContent = isNight ? '🌙' : '🌞';
+    }
+  } catch(e) {}
+}
+
+function showIndicator(text) {
+  const el = document.getElementById('saveIndicator');
+  el.textContent = text;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+// ===== INPUT =====
+function screenToWorld(sx, sy) {
+  return { x: Math.floor((sx - camera.x) / CELL), y: Math.floor((sy - camera.y) / CELL) };
+}
+
+function handlePointerDown(e) {
+  if (!gameStarted) return;
+  const t = e.touches ? e.touches[0] : e;
+  // Check if touching palette area
+  if (t.clientY > window.innerHeight * 0.55) return;
+  isDragging = true;
+  isPlacing = true;
+  lastTouch = {x:t.clientX, y:t.clientY};
+  lastPlacedKey = null;
+  const w = screenToWorld(t.clientX, t.clientY);
+  setBlock(w.x, w.y, selectedBlock);
+  lastPlacedKey = w.x+','+w.y;
+  updateUndoRedoBtns();
+}
+
+function handlePointerMove(e) {
+  if (!gameStarted || !isDragging) return;
+  const t = e.touches ? e.touches[0] : e;
+  const dx = t.clientX - lastTouch.x;
+  const dy = t.clientY - lastTouch.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  if (dist > 5) {
+    // Camera pan mode (two fingers or if we detect movement before placing)
+    camera.x += dx;
+    camera.y += dy;
+    lastTouch = {x:t.clientX, y:t.clientY};
+  } else {
+    // Place block on drag
+    const w = screenToWorld(t.clientX, t.clientY);
+    const key = w.x+','+w.y;
+    if (key !== lastPlacedKey) {
+      setBlock(w.x, w.y, selectedBlock);
+      lastPlacedKey = key;
+    }
+  }
+}
+
+function handlePointerUp() {
+  isDragging = false;
+  isPlacing = false;
+  lastPlacedKey = null;
+  updateUndoRedoBtns();
+}
+
+canvas.addEventListener('pointerdown', handlePointerDown);
+canvas.addEventListener('pointermove', handlePointerMove);
+canvas.addEventListener('pointerup', handlePointerUp);
+canvas.addEventListener('pointerleave', handlePointerUp);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); handlePointerDown(e); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); handlePointerMove(e); }, {passive:false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); handlePointerUp(e); }, {passive:false});
+
+// Mouse wheel zoom could be added here
+canvas.addEventListener('wheel', e => {
+  // Pan with mouse wheel
+  camera.x -= e.deltaX;
+  camera.y -= e.deltaY;
+  e.preventDefault();
+}, {passive:false});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+  if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveWorld(); }
+  if (e.key === 'n') toggleDayNight();
+});
+
+// ===== RENDERING =====
+function drawGrid() {
+  const startX = Math.floor(-camera.x / CELL);
+  const startY = Math.floor(-camera.y / CELL);
+  const endX = startX + Math.ceil(canvas.width / CELL) + 2;
+  const endY = startY + Math.ceil(canvas.height / CELL) + 2;
+
+  // Background
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  if (isNight) {
+    skyGrad.addColorStop(0, '#0a0a2e');
+    skyGrad.addColorStop(1, '#1a1a3e');
+  } else {
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(1, '#e0f0ff');
+  }
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid lines (subtle)
+  ctx.strokeStyle = isNight ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let x = startX; x <= endX; x++) {
+    const sx = x * CELL + camera.x;
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx, canvas.height);
+  }
+  for (let y = startY; y <= endY; y++) {
+    const sy = y * CELL + camera.y;
+    ctx.moveTo(0, sy);
+    ctx.lineTo(canvas.width, sy);
+  }
+  ctx.stroke();
+
+  // World boundary
+  ctx.strokeStyle = 'rgba(255,100,100,0.3)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(camera.x, camera.y, WORLD_W * CELL, WORLD_H * CELL);
+
+  // Blocks
+  for (let x = startX; x <= endX; x++) {
+    for (let y = startY; y <= endY; y++) {
+      const bid = getBlock(x, y);
+      if (bid === undefined) continue;
+      const b = BLOCKS[bid];
+      if (!b) continue;
+      const sx = x * CELL + camera.x;
+      const sy = y * CELL + camera.y;
+
+      // Block background
+      ctx.fillStyle = b.color;
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(sx + 1, sy + 1, CELL - 2, CELL - 2);
+      ctx.globalAlpha = 1;
+
+      // Emoji
+      ctx.font = `${CELL * 0.7}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.emoji, sx + CELL/2, sy + CELL/2 + 1);
+
+      // Night overlay
+      if (isNight) {
+        ctx.fillStyle = 'rgba(0,0,40,0.3)';
+        ctx.fillRect(sx + 1, sy + 1, CELL - 2, CELL - 2);
+      }
+    }
+  }
+
+  // Ghost preview at cursor
+  if (selectedBlock !== undefined && selectedBlock !== 99) {
+    // Could add hover preview here
+  }
+}
+
+function drawMinimap() {
+  const mw = 140, mh = 140;
+  miniCtx.clearRect(0, 0, mw, mh);
+
+  // Background
+  miniCtx.fillStyle = isNight ? '#0a0a2e' : '#87CEEB';
+  miniCtx.fillRect(0, 0, mw, mh);
+
+  // Scale
+  const sx = mw / WORLD_W;
+  const sy = mh / WORLD_H;
+
+  // Draw blocks (sample every few)
+  const step = Math.max(1, Math.floor(WORLD_W / 50));
+  for (let x = 0; x < WORLD_W; x += step) {
+    for (let y = 0; y < WORLD_H; y += step) {
+      const bid = getBlock(x, y);
+      if (bid === undefined) continue;
+      const b = BLOCKS[bid];
+      if (!b) continue;
+      miniCtx.fillStyle = b.color;
+      miniCtx.fillRect(x * sx, y * sy, Math.max(1, step * sx), Math.max(1, step * sy));
+    }
+  }
+
+  // Camera viewport
+  const vx = (-camera.x / CELL) * sx;
+  const vy = (-camera.y / CELL) * sy;
+  const vw = (canvas.width / CELL) * sx;
+  const vh = (canvas.height / CELL) * sy;
+  miniCtx.strokeStyle = '#fff';
+  miniCtx.lineWidth = 1.5;
+  miniCtx.strokeRect(vx, vy, vw, vh);
+}
+
+// ===== COORDINATE DISPLAY =====
+function updateCoords() {
+  const cx = Math.floor((-camera.x + canvas.width/2) / CELL);
+  const cy = Math.floor((-camera.y + canvas.height/2) / CELL);
+  document.getElementById('coordDisplay').textContent = `${cx}, ${cy}`;
+}
+
+// ===== GAME LOOP =====
+let lastTime = 0;
+function gameLoop(time) {
+  if (!gameStarted) return;
+  const dt = time - lastTime;
+  lastTime = time;
+
+  drawGrid();
+  drawMinimap();
+  updateCoords();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ===== INITIAL SETUP =====
+buildPalette();
+</script>
+</body>
+</html>

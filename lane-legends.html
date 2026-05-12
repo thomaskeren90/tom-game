@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Lane Legends</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#1a0a2e;font-family:'Segoe UI',sans-serif;overflow:hidden;user-select:none}
+canvas{display:block}
+#startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#1a0a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#startScreen h1{font-size:3em;color:#fff;text-shadow:0 0 30px #e74c3c,0 0 60px #c0392b;margin-bottom:10px;animation:glow 2s ease-in-out infinite alternate}
+#startScreen .subtitle{color:#e74c3c;font-size:1.2em;margin-bottom:30px}
+.btn{padding:15px 40px;font-size:1.3em;border:2px solid #e74c3c;background:transparent;color:#e74c3c;border-radius:8px;cursor:pointer;margin:5px;transition:all .3s}
+.btn:hover,.btn:active{background:#e74c3c;color:#fff;transform:scale(1.05)}
+@keyframes glow{from{text-shadow:0 0 20px #e74c3c}to{text-shadow:0 0 40px #e74c3c,0 0 80px #c0392b}}
+#hud{position:fixed;top:0;left:0;width:100%;padding:8px;display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,.7);z-index:10;font-size:.85em;color:#fff}
+#hud .team{display:flex;gap:15px}
+.hp-bar{width:120px;height:12px;background:#333;border-radius:6px;overflow:hidden;border:1px solid #555}
+.hp-fill{height:100%;transition:width .3s;border-radius:6px}
+.mana-fill{background:linear-gradient(90deg,#3498db,#2980b9)}
+.hero-hp{background:linear-gradient(90deg,#e74c3c,#c0392b)}
+.gold{color:#f1c40f;font-weight:bold}
+#skills{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:10}
+.skill-btn{width:55px;height:55px;border-radius:50%;border:2px solid #e74c3c;background:rgba(0,0,0,.8);color:#fff;font-size:1.1em;cursor:pointer;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.skill-btn .cd-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;font-size:.8em;color:#e74c3c;border-radius:50%;opacity:0;transition:opacity .2s}
+.skill-btn.on-cd .cd-overlay{opacity:1}
+#minimap{position:fixed;bottom:80px;right:10px;width:100px;height:140px;background:rgba(0,0,0,.6);border:1px solid #555;border-radius:5px;z-index:10}
+#messages{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:20;color:#fff;font-size:1.2em;text-shadow:0 0 10px #000;pointer-events:none;transition:opacity .5s}
+#gameOver{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50}
+#gameOver h2{font-size:3em;margin-bottom:20px}
+#gameOver.victory h2{color:#2ecc71;text-shadow:0 0 30px #27ae60}
+#gameOver.defeat h2{color:#e74c3c;text-shadow:0 0 30px #c0392b}
+#joystickArea{position:fixed;bottom:80px;left:20px;width:120px;height:120px;z-index:10}
+#joystickBase{width:100px;height:100px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);border-radius:50%;position:absolute;bottom:10px;left:10px}
+#joystickKnob{width:40px;height:40px;background:rgba(231,76,60,.6);border-radius:50%;position:absolute;bottom:40px;left:40px;transition:none}
+</style>
+</head>
+<body>
+<div id="startScreen">
+<h1>⚔️ Lane Legends</h1>
+<div class="subtitle">3v3 MOBA — Fix the toxicity</div>
+<button class="btn" onclick="startGame()">▶ START MATCH</button>
+<div style="color:#888;margin-top:20px;font-size:.8em">Tap to move • Tap skills to use • Auto-attack nearby enemies</div>
+</div>
+<div id="hud" style="display:none">
+<div class="team" id="blueTeam"></div>
+<div id="goldDisplay" class="gold">💰 0</div>
+<div class="team" id="redTeam"></div>
+</div>
+<div id="skills" style="display:none">
+<div class="skill-btn" onclick="useSkill(0)">Q<div class="cd-overlay"></div></div>
+<div class="skill-btn" onclick="useSkill(1)">W<div class="cd-overlay"></div></div>
+<div class="skill-btn" onclick="useSkill(2)">E<div class="cd-overlay"></div></div>
+<div class="skill-btn" onclick="useSkill(3)">R<div class="cd-overlay"></div></div>
+</div>
+<canvas id="minimap" style="display:none"></canvas>
+<div id="messages"></div>
+<div id="gameOver"><h2 id="resultText"></h2><p id="statsText" style="color:#aaa;margin-bottom:20px"></p><button class="btn" onclick="location.reload()">Play Again</button></div>
+<div id="joystickArea" style="display:none"><div id="joystickBase"></div><div id="joystickKnob"></div></div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const miniCanvas=document.getElementById('minimap');
+const miniCtx=miniCanvas.getContext('2d');
+
+let W,H,gameRunning=false,gold=0,kills=0,deaths=0,gameTime=0;
+const MAP_W=3000,MAP_H=2000;
+const LANE_Y=[400,1000,1600];
+const TOWER_X_BLUE=[300,800,1300];
+const TOWER_X_RED=[2700,2200,1700];
+
+let camera={x:0,y:0};
+let player,entities=[],particles=[],projectiles=[];
+let joystickActive=false,jStart={x:0,y:0},jDir={x:0,y:0};
+let autoAttackTimer=0;
+
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+window.addEventListener('resize',resize);
+resize();
+
+class Entity{
+constructor(x,y,team,type){
+this.x=x;this.y=y;this.team=team;this.type=type;
+this.hp=100;this.maxHp=100;this.mana=100;this.maxMana=100;
+this.speed=2;this.range=type==='tower'?200:120;this.damage=type==='tower'?25:15;
+this.atkSpeed=type==='tower'?1.5:1;this.atkTimer=0;this.alive=true;
+this.target=null;this.radius=type==='hero'?18:type==='minion'?10:type==='tower'?25:12;
+this.goldValue=type==='minion'?20:type==='hero'?300:type==='tower'?500:0;
+this.level=1;this.xp=0;this.skills=[{cd:0,maxCd:6,name:'Q'},{cd:0,maxCd:8,name:'W'},{cd:0,maxCd:10,name:'E'},{cd:0,maxCd:30,name:'R'}];
+this.isPlayer=false;this.afkTimer=0;this.aiControlled=false;
+this.lane=0;this.moveTarget=null;this.deadTimer=0;
+}
+update(dt){
+if(!this.alive){this.deadTimer-=dt;if(this.deadTimer<=0)this.respawn();return}
+this.skills.forEach(s=>{if(s.cd>0)s.cd=Math.max(0,s.cd-dt)});
+if(this.type==='hero')this.mana=Math.min(this.maxMana,this.mana+5*dt);
+this.atkTimer=Math.max(0,this.atkTimer-dt);
+this.target=this.findTarget();
+if(this.target&&this.distTo(this.target)<=this.range){
+if(this.atkTimer<=0){this.attack(this.target);this.atkTimer=this.atkSpeed}
+}else if(this.moveTarget){
+const dx=this.moveTarget.x-this.x,dy=this.moveTarget.y-this.y;
+const d=Math.sqrt(dx*dx+dy*dy);
+if(d>5){this.x+=dx/d*this.speed*dt*60;this.y+=dy/d*this.speed*dt*60}
+else this.moveTarget=null;
+}else if(this.aiControlled||this.type==='minion'){
+this.marchForward(dt)
+}
+this.x=Math.max(this.radius,Math.min(MAP_W-this.radius,this.x));
+this.y=Math.max(this.radius,Math.min(MAP_H-this.radius,this.y));
+}
+marchForward(dt){
+const dir=this.team==='blue'?1:-1;
+const laneY=LANE_Y[this.lane];
+const dy=laneY-this.y;
+if(Math.abs(dy)>10){this.y+=Math.sign(dy)*this.speed*dt*60}
+else{this.x+=dir*this.speed*dt*60}
+}
+findTarget(){
+let closest=null,minD=this.range+50;
+entities.forEach(e=>{
+if(!e.alive||e.team===this.team||e.type==='minion'&&e.team===this.team)return;
+const d=this.distTo(e);
+if(d<minD){minD=d;closest=e}
+});
+return closest;
+}
+distTo(e){return Math.sqrt((this.x-e.x)**2+(this.y-e.y)**2)}
+attack(target){
+const dmg=this.damage+this.level*2;
+target.hp-=dmg;
+spawnProjectile(this,target);
+if(target.hp<=0){target.die(this)}
+}
+die(killer){
+this.alive=false;
+if(this.type==='hero'){
+deaths++;this.deadTimer=8+this.level*2;
+if(killer.isPlayer){gold+=this.goldValue;kills++;showMsg('💀 Enemy Eliminated! +'+this.goldValue+'g')}
+else if(this.isPlayer){showMsg('☠️ You Died!')}
+if(killer.type==='hero'){killer.xp+=200;killer.checkLevelUp()}
+}else if(this.type==='minion'){
+if(killer.isPlayer)gold+=this.goldValue;
+this.deadTimer=999;
+}else if(this.type==='tower'){
+showMsg((this.team==='blue'?'🔴 Our':'🔵 Enemy')+' tower destroyed!');
+this.deadTimer=999;
+}
+spawnDeathParticles(this);
+}
+respawn(){
+this.alive=true;this.hp=this.maxHp;this.mana=this.maxMana;
+const baseX=this.team==='blue'?100:MAP_W-100;
+this.x=baseX;this.y=LANE_Y[this.lane];
+}
+checkLevelUp(){
+if(this.xp>=this.level*300){this.level++;this.maxHp+=20;this.hp=this.maxHp;this.damage+=3;this.xp=0;this.speed+=.1;showMsg('⬆️ Level Up! Lv.'+this.level)}
+}
+}
+
+const SKILL_DEFS=[
+{range:200,damage:40,mana:20,color:'#e74c3c',type:'projectile'},
+{range:150,damage:60,mana:30,color:'#9b59b6',type:'aoe'},
+{range:0,damage:0,mana:25,color:'#2ecc71',type:'heal'},
+{range:250,damage:100,mana:60,color:'#f39c12',type:'projectile'}
+];
+
+function useSkill(idx){
+if(!player||!player.alive)return;
+const sk=player.skills[idx];const def=SKILL_DEFS[idx];
+if(sk.cd>0||player.mana<def.mana)return;
+sk.cd=sk.maxCd;player.mana-=def.mana;
+if(def.type==='heal'){
+player.hp=Math.min(player.maxHp,player.hp+50);
+spawnParticles(player.x,player.y,'#2ecc71',15);
+showMsg('💚 Healed!');
+return;
+}
+const target=player.target||entities.find(e=>e.alive&&e.team!=='blue'&&e.type==='hero'&&player.distTo(e)<def.range);
+if(target){
+const dmg=def.damage+player.level*5;
+target.hp-=dmg;
+spawnParticles(target.x,target.y,def.color,20);
+projectiles.push({sx:player.x,sy:player.y,tx:target.x,ty:target.y,t:.3,color:def.color});
+if(target.hp<=0)target.die(player);
+showMsg('⚔️ '+sk.name+' hit! '+dmg+' dmg');
+}
+}
+
+function spawnProjectile(from,to){
+projectiles.push({sx:from.x,sy:from.y,tx:to.x,ty:to.y,t:.2,color:from.team==='blue'?'#3498db':'#e74c3c'});
+}
+function spawnParticles(x,y,color,n){
+for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4,life:1,color,r:Math.random()*3+1});
+}
+function spawnDeathParticles(e){spawnParticles(e.x,e.y,'#fff',25);spawnParticles(e.x,e.y,'#e74c3c',15)}
+
+function initEntities(){
+entities=[];
+player=new Entity(100,LANE_Y[1],'blue','hero');
+player.isPlayer=true;player.speed=3;player.damage=20;player.range=140;
+entities.push(player);
+for(let lane=0;lane<3;lane++){
+const bTower=new Entity(TOWER_X_BLUE[lane],LANE_Y[lane],'blue','tower');
+bTower.lane=lane;entities.push(bTower);
+const rTower=new Entity(TOWER_X_RED[lane],LANE_Y[lane],'red','tower');
+rTower.lane=lane;entities.push(rTower);
+}
+for(let i=0;i<2;i++){
+const ally=new Entity(150,LANE_Y[i],'blue','hero');
+ally.lane=i;ally.aiControlled=true;entities.push(ally);
+const enemy=new Entity(MAP_W-150,LANE_Y[i],'red','hero');
+enemy.lane=i;enemy.aiControlled=true;entities.push(enemy);
+}
+const enemyMid=new Entity(MAP_W-150,LANE_Y[1],'red','hero');
+enemyMid.lane=1;enemyMid.aiControlled=true;entities.push(enemyMid);
+}
+
+let minionTimer=0;
+function spawnMinions(){
+for(let lane=0;lane<3;lane++){
+for(let i=0;i<3;i++){
+const bm=new Entity(80+i*20,LANE_Y[lane]+(i-1)*15,'blue','minion');
+bm.lane=lane;entities.push(bm);
+const rm=new Entity(MAP_W-80-i*20,LANE_Y[lane]+(i-1)*15,'red','minion');
+rm.lane=lane;entities.push(rm);
+}
+}
+}
+
+function showMsg(text){
+const el=document.getElementById('messages');
+el.textContent=text;el.style.opacity=1;
+setTimeout(()=>el.style.opacity=0,2000);
+}
+
+function updateHUD(){
+const bTeam=document.getElementById('blueTeam');
+const rTeam=document.getElementById('redTeam');
+const blueHeroes=entities.filter(e=>e.type==='hero'&&e.team==='blue');
+const redHeroes=entities.filter(e=>e.type==='hero'&&e.team==='red');
+bTeam.innerHTML=blueHeroes.map(h=>`<div><span style="color:#3498db">${h.isPlayer?'👤':'🤖'} Lv${h.level}</span><div class="hp-bar"><div class="hp-fill hero-hp" style="width:${h.hp/h.maxHp*100}%"></div></div><div class="hp-bar" style="height:6px;margin-top:2px"><div class="hp-fill mana-fill" style="width:${h.mana/h.maxMana*100}%"></div></div></div>`).join('');
+rTeam.innerHTML=redHeroes.map(h=>`<div><span style="color:#e74c3c">🤖 Lv${h.level}</span><div class="hp-bar"><div class="hp-fill hero-hp" style="width:${h.hp/h.maxHp*100}%"></div></div></div>`).join('');
+document.getElementById('goldDisplay').textContent='💰 '+gold;
+document.querySelectorAll('.skill-btn').forEach((btn,i)=>{
+const sk=player.skills[i];
+if(sk.cd>0){btn.classList.add('on-cd');btn.querySelector('.cd-overlay').textContent=Math.ceil(sk.cd)+'s'}
+else{btn.classList.remove('on-cd');btn.querySelector('.cd-overlay').textContent=''}
+});
+}
+
+function drawMinimap(){
+miniCanvas.width=100;miniCanvas.height=140;
+miniCtx.fillStyle='#1a1a2e';miniCtx.fillRect(0,0,100,140);
+miniCtx.strokeStyle='#333';miniCtx.lineWidth=1;
+for(let i=0;i<3;i++){const y=LANE_Y[i]/MAP_H*140;miniCtx.beginPath();miniCtx.moveTo(10,y);miniCtx.lineTo(90,y);miniCtx.stroke()}
+entities.forEach(e=>{
+if(!e.alive)return;
+const mx=e.x/MAP_W*100,my=e.y/MAP_H*140;
+miniCtx.fillStyle=e.team==='blue'?(e.isPlayer?'#fff':'#3498db'):'#e74c3c';
+miniCtx.beginPath();miniCtx.arc(mx,my,e.isPlayer?4:2,0,Math.PI*2);miniCtx.fill();
+});
+}
+
+function draw(){
+ctx.save();
+ctx.fillStyle='#0d1b2a';ctx.fillRect(0,0,W,H);
+camera.x=player.x-W/2;camera.y=player.y-H/2;
+camera.x=Math.max(0,Math.min(MAP_W-W,camera.x));
+camera.y=Math.max(0,Math.min(MAP_H-H,camera.y));
+ctx.translate(-camera.x,-camera.y);
+ctx.fillStyle='#1b2838';ctx.fillRect(0,0,MAP_W,MAP_H);
+ctx.strokeStyle='#2a3a4a';ctx.lineWidth=2;
+for(let y=0;y<MAP_H;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(MAP_W,y);ctx.stroke()}
+for(let x=0;x<MAP_W;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,MAP_H);ctx.stroke()}
+ctx.strokeStyle='#4a5a6a';ctx.lineWidth=3;
+LANE_Y.forEach(y=>{ctx.beginPath();ctx.setLineDash([10,5]);ctx.moveTo(0,y);ctx.lineTo(MAP_W,y);ctx.stroke();ctx.setLineDash([])});
+// Bases
+ctx.fillStyle='rgba(52,152,219,.15)';ctx.fillRect(0,0,250,MAP_H);
+ctx.fillStyle='rgba(231,76,60,.15)';ctx.fillRect(MAP_W-250,0,250,MAP_H);
+// Towers
+entities.filter(e=>e.type==='tower').forEach(t=>{
+const grd=ctx.createRadialGradient(t.x,t.y,5,t.x,t.y,t.range);
+grd.addColorStop(0,t.team==='blue'?'rgba(52,152,219,.15)':'rgba(231,76,60,.15)');
+grd.addColorStop(1,'transparent');
+ctx.fillStyle=grd;ctx.fillRect(t.x-t.range,t.y-t.range,t.range*2,t.range*2);
+if(!t.alive){ctx.globalAlpha=.3}
+ctx.fillStyle=t.team==='blue'?'#2980b9':'#c0392b';
+ctx.beginPath();ctx.arc(t.x,t.y,t.radius,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle=t.team==='blue'?'#3498db':'#e74c3c';ctx.lineWidth=3;ctx.stroke();
+ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+ctx.fillText('🏰',t.x,t.y+5);
+ctx.globalAlpha=1;
+// HP bar
+if(t.alive){
+ctx.fillStyle='#333';ctx.fillRect(t.x-20,t.y-t.radius-12,40,6);
+ctx.fillStyle=t.team==='blue'?'#3498db':'#e74c3c';ctx.fillRect(t.x-20,t.y-t.radius-12,40*t.hp/t.maxHp,6);
+}
+});
+// Minions
+entities.filter(e=>e.type==='minion'&&e.alive).forEach(m=>{
+ctx.fillStyle=m.team==='blue'?'#3498db':'#e74c3c';
+ctx.beginPath();ctx.arc(m.x,m.y,m.radius,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#333';ctx.fillRect(m.x-8,m.y-m.radius-6,16,3);
+ctx.fillStyle=m.team==='blue'?'#3498db':'#e74c3c';ctx.fillRect(m.x-8,m.y-m.radius-6,16*m.hp/m.maxHp,3);
+});
+// Heroes
+entities.filter(e=>e.type==='hero').forEach(h=>{
+if(!h.alive){ctx.globalAlpha=.3}
+ctx.fillStyle=h.isPlayer?'#fff':(h.team==='blue'?'#3498db':'#e74c3c');
+ctx.beginPath();ctx.arc(h.x,h.y,h.radius,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle=h.isPlayer?'#f1c40f':(h.team==='blue'?'#5dade2':'#e74c3c');
+ctx.lineWidth=3;ctx.stroke();
+ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+ctx.fillText(h.isPlayer?'⚔️':'🗡️',h.x,h.y+4);
+ctx.fillStyle='#333';ctx.fillRect(h.x-20,h.y-h.radius-10,40,5);
+ctx.fillStyle=h.team==='blue'?'#2ecc71':'#e74c3c';ctx.fillRect(h.x-20,h.y-h.radius-10,40*h.hp/h.maxHp,5);
+ctx.fillStyle='#aaa';ctx.font='9px sans-serif';
+ctx.fillText('Lv'+h.level,h.x,h.y-h.radius-14);
+ctx.globalAlpha=1;
+});
+// Projectiles
+projectiles.forEach(p=>{
+const prog=1-p.t/.2;
+ctx.strokeStyle=p.color;ctx.lineWidth=3;
+ctx.globalAlpha=1-prog;
+ctx.beginPath();ctx.moveTo(p.sx+(p.tx-p.sx)*prog,p.sy+(p.ty-p.sy)*prog);
+ctx.lineTo(p.sx+(p.tx-p.sx)*(prog+.1),p.sy+(p.ty-p.sy)*(prog+.1));ctx.stroke();
+ctx.globalAlpha=1;
+});
+// Particles
+particles.forEach(p=>{
+ctx.globalAlpha=p.life;ctx.fillStyle=p.color;
+ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=1;
+});
+// Click indicator
+if(player.moveTarget&&player.alive){
+ctx.strokeStyle='rgba(46,204,113,.5)';ctx.lineWidth=2;ctx.setLineDash([4,4]);
+ctx.beginPath();ctx.arc(player.moveTarget.x,player.moveTarget.y,15,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+}
+ctx.restore();
+drawMinimap();
+}
+
+let lastTime=0;
+function gameLoop(ts){
+if(!gameRunning)return;
+const dt=Math.min((ts-lastTime)/1000,.1);
+lastTime=ts;gameTime+=dt;
+if(joystickActive&&player.alive){
+player.moveTarget={x:player.x+jDir.x*200,y:player.y+jDir.y*200};
+}
+autoAttackTimer-=dt;
+if(autoAttackTimer<=0&&player.alive){
+const near=entities.find(e=>e.alive&&e.team!=='blue'&&player.distTo(e)<player.range);
+if(near){player.attack(near);autoAttackTimer=player.atkSpeed}
+}
+entities.forEach(e=>e.update(dt));
+projectiles=projectiles.filter(p=>{p.t-=dt;return p.t>0});
+particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life-=dt*2;return p.life>0});
+minionTimer-=dt;
+if(minionTimer<=0){spawnMinions();minionTimer=30}
+updateHUD();
+const blueTowers=entities.filter(e=>e.type==='tower'&&e.team==='blue'&&e.alive).length;
+const redTowers=entities.filter(e=>e.type==='tower'&&e.team==='red'&&e.alive).length;
+if(redTowers===0)endGame(true);
+if(blueTowers===0)endGame(false);
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+function endGame(victory){
+gameRunning=false;
+const go=document.getElementById('gameOver');
+go.style.display='flex';
+go.className=victory?'victory':'defeat';
+document.getElementById('resultText').textContent=victory?'🏆 VICTORY!':'💀 DEFEAT';
+document.getElementById('statsText').textContent=`Kills: ${kills} | Deaths: ${deaths} | Gold: ${gold} | Time: ${Math.floor(gameTime/60)}m${Math.floor(gameTime%60)}s`;
+}
+
+function startGame(){
+document.getElementById('startScreen').style.display='none';
+document.getElementById('hud').style.display='flex';
+document.getElementById('skills').style.display='flex';
+document.getElementById('minimap').style.display='block';
+document.getElementById('joystickArea').style.display='block';
+gameRunning=true;
+initEntities();
+spawnMinions();
+minionTimer=30;
+showMsg('⚔️ Lane Legends — Destroy the enemy towers!');
+requestAnimationFrame(gameLoop);
+}
+
+// Joystick
+const jArea=document.getElementById('joystickArea');
+const jBase=document.getElementById('joystickBase');
+const jKnob=document.getElementById('joystickKnob');
+jArea.addEventListener('touchstart',e=>{
+e.preventDefault();const t=e.touches[0];
+const rect=jBase.getBoundingClientRect();
+jStart.x=rect.left+rect.width/2;jStart.y=rect.top+rect.height/2;
+joystickActive=true;
+},{passive:false});
+jArea.addEventListener('touchmove',e=>{
+e.preventDefault();if(!joystickActive)return;
+const t=e.touches[0];
+let dx=t.clientX-jStart.x,dy=t.clientY-jStart.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+const maxDist=35;
+if(dist>maxDist){dx=dx/dist*maxDist;dy=dy/dist*maxDist}
+jKnob.style.left=(40+dx)+'px';jKnob.style.bottom=(40-dy)+'px';
+jDir={x:dx/maxDist,y:-dy/maxDist};
+},{passive:false});
+jArea.addEventListener('touchend',()=>{
+joystickActive=false;jDir={x:0,y:0};
+jKnob.style.left='40px';jKnob.style.bottom='40px';
+});
+
+// Tap to move
+canvas.addEventListener('click',e=>{
+if(!player||!player.alive||joystickActive)return;
+const tx=e.clientX+camera.x,ty=e.clientY+camera.y;
+player.moveTarget={x:tx,y:ty};
+});
+
+canvas.addEventListener('touchstart',e=>{
+if(joystickActive)return;
+const t=e.touches[0];
+if(t.clientX>W/2&&player&&player.alive){
+player.moveTarget={x:t.clientX+camera.x,y:t.clientY+camera.y};
+}
+},{passive:true});
+</script>
+</body>
+</html>

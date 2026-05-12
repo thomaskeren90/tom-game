@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Goal Rush</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#0a1a0a;font-family:'Segoe UI',sans-serif;overflow:hidden;user-select:none}
+canvas{display:block}
+#startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a1a0a,#1a2e1a);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#startScreen h1{font-size:2.8em;color:#2ecc71;text-shadow:0 0 30px #27ae60;margin-bottom:10px}
+.subtitle{color:#888;margin-bottom:20px}
+.team-select{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:400px;margin-bottom:20px}
+.team-btn{padding:8px 14px;font-size:.85em;border:2px solid #2ecc71;background:transparent;color:#2ecc71;border-radius:6px;cursor:pointer;transition:all .3s}
+.team-btn:hover,.team-btn.selected{background:#2ecc71;color:#0a1a0a}
+.btn{padding:12px 30px;font-size:1.1em;border:2px solid #2ecc71;background:transparent;color:#2ecc71;border-radius:8px;cursor:pointer;transition:all .3s}
+.btn:hover,.btn:active{background:#2ecc71;color:#0a1a0a}
+#hud{position:fixed;top:0;left:0;width:100%;padding:8px 15px;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,.85);z-index:10;color:#fff;font-size:.9em;gap:20px}
+#hud .score{font-size:2em;font-weight:bold}
+#hud .team-name{font-size:.8em;color:#aaa}
+#timer{font-size:1.2em;color:#f1c40f;font-weight:bold}
+#msg{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:20;color:#f1c40f;font-size:1.3em;text-shadow:0 0 10px #000;pointer-events:none;transition:opacity .5s}
+#controls{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);display:none;gap:10px;z-index:10}
+.ctrl-btn{width:55px;height:55px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.5);color:#fff;font-size:1.2em;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#gameOver{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;color:#fff}
+#gameOver h2{font-size:2.5em}
+#gameOver .final-score{font-size:4em;font-weight:bold;margin:15px 0}
+</style>
+</head>
+<body>
+<div id="startScreen">
+<h1>⚽ Goal Rush</h1>
+<div class="subtitle">Fair-play football. No momentum. Pure skill.</div>
+<div class="team-select" id="teamSelect"></div>
+<button class="btn" onclick="startGame()">▶ Kick Off</button>
+<div style="color:#555;margin-top:15px;font-size:.8em">Swipe to pass/shoot • Tap player to switch • 5v5 Futsal</div>
+</div>
+<div id="hud">
+<div id="homeTeam"><div class="team-name">HOME</div><div class="score" id="homeScore">0</div></div>
+<div id="timer">05:00</div>
+<div id="awayTeam"><div class="team-name">AWAY</div><div class="score" id="awayScore">0</div></div>
+</div>
+<canvas id="gameCanvas"></canvas>
+<div id="controls">
+<div class="ctrl-btn" id="btnPass" ontouchstart="doPass()">P</div>
+<div class="ctrl-btn" id="btnShoot" ontouchstart="doShoot()">S</div>
+<div class="ctrl-btn" id="btnSwitch" ontouchstart="switchPlayer()">⇄</div>
+</div>
+<div id="msg"></div>
+<div id="gameOver">
+<h2 id="resultText">Full Time</h2>
+<div class="final-score" id="finalScore">0 - 0</div>
+<button class="btn" onclick="location.reload()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+let W,H,PW,PH,PL,PT;
+const PLAYER_R=10,BALL_R=6,GOAL_W=60,PLAYER_SPEED=2.5;
+const TEAMS=[
+{name:'Persija',color:'#e74c3c',alt:'#c0392b'},
+{name:'Persib',color:'#3498db',alt:'#2980b9'},
+{name:'Arema',color:'#2980b9',alt:'#1a5276'},
+{name:'Bali United',color:'#e67e22',alt:'#d35400'},
+{name:'Persebaya',color:'#27ae60',alt:'#1e8449'},
+{name:'PSM',color:'#e74c3c',alt:'#922b21'},
+{name:'Borneo FC',color:'#f39c12',alt:'#d68910'},
+{name:'Madura United',color:'#8e44ad',alt:'#6c3483'}
+];
+let selectedTeam=0,matchTime=300,gameTime=0,gameRunning=false;
+let homeScore=0,awayScore=0;
+let players=[],ball={},controlled=null;
+let aiPlayers=[],homePlayers=[],awayPlayers=[];
+let ballHolder=null,goalScored=false;
+let swipeStart=null,swiping=false;
+
+function resize(){
+const maxW=window.innerWidth,maxH=window.innerHeight-80;
+const ratio=1.5;
+if(maxW/ratio<maxH){PW=maxW-10;PH=PW/ratio}
+else{PH=maxH-10;PW=PH*ratio}
+PL=(window.innerWidth-PW)/2;PT=50;
+canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+}
+window.addEventListener('resize',resize);resize();
+
+// Team select UI
+const selDiv=document.getElementById('teamSelect');
+TEAMS.forEach((t,i)=>{
+const btn=document.createElement('button');
+btn.className='team-btn'+(i===0?' selected':'');
+btn.textContent=t.name;btn.style.borderColor=t.color;btn.style.color=t.color;
+btn.onclick=()=>{selectedTeam=i;document.querySelectorAll('.team-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected')};
+selDiv.appendChild(btn);
+});
+
+class Player{
+constructor(x,y,team,idx,isAI){
+this.homeX=x;this.homeY=y;this.x=x;this.y=y;this.team=team;this.idx=idx;this.isAI=isAI;
+this.vx=0;this.vy=0;this.speed=PLAYER_SPEED;this.hasBall=false;
+this.targetX=x;this.targetY=y;this.radius=PLAYER_R;
+}
+update(dt){
+const dx=this.targetX-this.x,dy=this.targetY-this.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+if(dist>2){
+this.vx=dx/dist*this.speed;this.vy=dy/dist*this.speed;
+this.x+=this.vx*dt*60;this.y+=this.vy*dt*60;
+}else{this.vx=0;this.vy=0}
+// Keep in bounds
+this.x=Math.max(PL+this.radius,Math.min(PL+PW-this.radius,this.x));
+this.y=Math.max(PT+this.radius,Math.min(PT+PH-this.radius,this.y));
+}
+draw(){
+ctx.fillStyle=this.team===0?TEAMS[selectedTeam].color:'#555';
+ctx.beginPath();ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle=this===controlled?'#f1c40f':'rgba(255,255,255,.3)';ctx.lineWidth=this===controlled?3:1;ctx.stroke();
+// Direction indicator
+if(this.vx||this.vy){
+ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=2;
+ctx.beginPath();ctx.moveTo(this.x,this.y);
+ctx.lineTo(this.x+this.vx*5,this.y+this.vy*5);ctx.stroke();
+}
+// Number
+ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(this.idx+1,this.x,this.y);
+}
+}
+
+function initGame(){
+players=[];homePlayers=[];awayPlayers=[];
+const positions=[
+[.15,.3],[.15,.5],[.15,.7],[.3,.4],[.3,.6]
+];
+positions.forEach((p,i)=>{
+const hp=new Player(PL+p[0]*PW,PT+p[1]*PH,0,i,false);
+homePlayers.push(hp);players.push(hp);
+const ap=new Player(PL+(1-p[0])*PW,PT+p[1]*PH,1,i,true);
+awayPlayers.push(ap);players.push(ap);
+});
+controlled=homePlayers[0];
+ball={x:PL+PW/2,y:PT+PH/2,vx:0,vy:0,r:BALL_R,holder:null};
+homeScore=0;awayScore=0;gameTime=0;goalScored=false;
+}
+
+function updateBall(dt){
+if(ball.holder){
+ball.x=ball.holder.x+(ball.holder.vx>0?8:ball.holder.vx<0?-8:0);
+ball.y=ball.holder.y-5;
+ball.vx=ball.holder.vx*.5;ball.vy=ball.holder.vy*.5;
+return;
+}
+ball.vx*=.97;ball.vy*=.97;
+ball.x+=ball.vx*dt*60;ball.y+=ball.vy*dt*60;
+// Walls
+if(ball.y-ball.r<PT){ball.y=PT+ball.r;ball.vy*=-.7}
+if(ball.y+ball.r>PT+PH){ball.y=PT+PH-ball.r;ball.vy*=-.7}
+// Goal check
+const goalY1=PT+PH/2-GOAL_W/2,goalY2=PT+PH/2+GOAL_W/2;
+if(ball.x-ball.r<PL){
+if(ball.y>goalY1&&ball.y<goalY2){scoreGoal(1)}
+else{ball.x=PL+ball.r;ball.vx*=-.7}
+}
+if(ball.x+ball.r>PL+PW){
+if(ball.y>goalY1&&ball.y<goalY2){scoreGoal(0)}
+else{ball.x=PL+PW-ball.r;ball.vx*=-.7}
+}
+// Pickup
+players.forEach(p=>{
+const dx=ball.x-p.x,dy=ball.y-p.y;
+if(Math.sqrt(dx*dx+dy*dy)<p.radius+ball.r&&!ball.holder){
+ball.holder=p;p.hasBall=true;
+}
+});
+}
+
+function scoreGoal(team){
+if(goalScored)return;goalScored=true;
+if(team===0)homeScore++;else awayScore++;
+document.getElementById('homeScore').textContent=homeScore;
+document.getElementById('awayScore').textContent=awayScore;
+showMsg('⚽ GOAL! '+(team===0?TEAMS[selectedTeam].name:'AI')+' scores!');
+// Reset
+setTimeout(()=>{
+ball.x=PL+PW/2;ball.y=PT+PH/2;ball.vx=0;ball.vy=0;ball.holder=null;
+players.forEach(p=>{p.x=p.homeX;p.y=p.homeY;p.hasBall=false});
+goalScored=false;
+},2000);
+}
+
+function aiUpdate(dt){
+// Simple AI: move toward ball, shoot at goal
+awayPlayers.forEach(p=>{
+if(ball.holder===p){
+// Move toward goal
+p.targetX=PL+PW*.85;
+p.targetY=PT+PH/2+(Math.random()-.5)*GOAL_W;
+// Shoot when close
+if(p.x>PL+PW*.75){
+ball.holder=null;p.hasBall=false;
+ball.vx=-6;ball.vy=(Math.random()-.5)*4;
+showMsg('🤖 AI shoots!');
+}
+}else{
+const dist=Math.sqrt((ball.x-p.x)**2+(ball.y-p.y)**2);
+if(dist<100&&!ball.holder){
+p.targetX=ball.x;p.targetY=ball.y;
+}else{
+// Formation
+p.targetX=p.homeX+(ball.x-PL-PW/2)*.15;
+p.targetY=p.homeY+(ball.y-PT-PH/2)*.1;
+}
+}
+});
+// Home AI
+homePlayers.forEach(p=>{
+if(p===controlled)return;
+if(ball.holder===p){
+p.targetX=PL+PW*.7;
+p.targetY=PT+PH/2;
+}else{
+const dist=Math.sqrt((ball.x-p.x)**2+(ball.y-p.y)**2);
+if(dist<80&&!ball.holder){
+p.targetX=ball.x;p.targetY=ball.y;
+}else{
+p.targetX=p.homeX+(ball.x-PL-PW/2)*.1;
+p.targetY=p.homeY+(ball.y-PT-PH/2)*.1;
+}
+}
+});
+}
+
+function drawField(){
+// Background
+ctx.fillStyle='#1B5E20';ctx.fillRect(0,0,canvas.width,canvas.height);
+// Field
+ctx.fillStyle='#2E7D32';ctx.fillRect(PL,PT,PW,PH);
+// Stripes
+for(let i=0;i<10;i++){
+if(i%2===0){ctx.fillStyle='rgba(255,255,255,.03)';ctx.fillRect(PL+i*PW/10,PT,PW/10,PH)}
+}
+// Lines
+ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=2;
+ctx.strokeRect(PL,PT,PW,PH);
+// Center
+ctx.beginPath();ctx.arc(PL+PW/2,PT+PH/2,30,0,Math.PI*2);ctx.stroke();
+ctx.beginPath();ctx.arc(PL+PW/2,PT+PH/2,3,0,Math.PI*2);ctx.fill();
+// Center line
+ctx.beginPath();ctx.moveTo(PL+PW/2,PT);ctx.lineTo(PL+PW/2,PT+PH);ctx.stroke();
+// Goal areas
+const goalY1=PT+PH/2-GOAL_W/2,goalY2=PT+PH/2+GOAL_W/2;
+ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=3;
+ctx.beginPath();ctx.moveTo(PL,goalY1);ctx.lineTo(PL-15,goalY1);ctx.lineTo(PL-15,goalY2);ctx.lineTo(PL,goalY2);ctx.stroke();
+ctx.beginPath();ctx.moveTo(PL+PW,goalY1);ctx.lineTo(PL+PW+15,goalY1);ctx.lineTo(PL+PW+15,goalY2);ctx.lineTo(PL+PW,goalY2);ctx.stroke();
+// Goal nets
+ctx.fillStyle='rgba(255,255,255,.1)';
+ctx.fillRect(PL-15,goalY1,15,GOAL_W);
+ctx.fillRect(PL+PW,goalY1,15,GOAL_W);
+// Corner arcs
+ctx.strokeStyle='rgba(255,255,255,.3)';
+ctx.beginPath();ctx.arc(PL,PT,10,0,Math.PI/2);ctx.stroke();
+ctx.beginPath();ctx.arc(PL+PW,PT,10,Math.PI/2,Math.PI);ctx.stroke();
+ctx.beginPath();ctx.arc(PL,PT+PH,10,-Math.PI/2,0);ctx.stroke();
+ctx.beginPath();ctx.arc(PL+PW,PT+PH,10,Math.PI,Math.PI*1.5);ctx.stroke();
+}
+
+function drawBall(){
+if(ball.holder){
+ball.x=ball.holder.x;ball.y=ball.holder.y-ball.holder.radius;
+}
+// Shadow
+ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(ball.x+1,ball.y+2,ball.r,ball.r*.5,0,0,Math.PI*2);ctx.fill();
+// Ball
+ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
+// Pentagon pattern
+ctx.fillStyle='#333';
+for(let i=0;i<5;i++){
+const a=i*Math.PI*2/5-Math.PI/2;
+ctx.beginPath();ctx.arc(ball.x+Math.cos(a)*ball.r*.5,ball.y+Math.sin(a)*ball.r*.5,2,0,Math.PI*2);ctx.fill();
+}
+}
+
+function drawArrow(){
+if(!controlled||!swipeStart||!swiping)return;
+ctx.strokeStyle='rgba(241,196,15,.6)';ctx.lineWidth=3;ctx.setLineDash([5,5]);
+ctx.beginPath();ctx.moveTo(controlled.x,controlled.y);
+ctx.lineTo(swipeStart.x,swipeStart.y);ctx.stroke();
+ctx.setLineDash([]);
+// Arrowhead
+const angle=Math.atan2(swipeStart.y-controlled.y,swipeStart.x-controlled.x);
+ctx.fillStyle='rgba(241,196,15,.6)';
+ctx.beginPath();
+ctx.moveTo(swipeStart.x,swipeStart.y);
+ctx.lineTo(swipeStart.x-Math.cos(angle-.3)*10,swipeStart.y-Math.sin(angle-.3)*10);
+ctx.lineTo(swipeStart.x-Math.cos(angle+.3)*10,swipeStart.y-Math.sin(angle+.3)*10);
+ctx.fill();
+}
+
+function showMsg(t,d=2000){const el=document.getElementById('msg');el.textContent=t;el.style.opacity=1;setTimeout(()=>el.style.opacity=0,d)}
+
+function doPass(){
+if(!ball.holder||ball.holder.team!==0)return;
+const nearest=homePlayers.filter(p=>p!==ball.holder).sort((a,b)=>{
+const da=Math.sqrt((a.x-ball.x)**2+(a.y-ball.y)**2);
+const db=Math.sqrt((b.x-ball.x)**2+(b.y-ball.y)**2);
+return da-db;
+})[0];
+if(nearest){
+const angle=Math.atan2(nearest.y-ball.y,nearest.x-ball.x);
+ball.holder.hasBall=false;ball.holder=null;
+ball.vx=Math.cos(angle)*5;ball.vy=Math.sin(angle)*5;
+}
+}
+
+function doShoot(){
+if(!ball.holder||ball.holder.team!==0)return;
+const goalX=PL+PW;const goalY=PT+PH/2;
+const angle=Math.atan2(goalY-ball.y,goalX-ball.x)+(Math.random()-.5)*.5;
+ball.holder.hasBall=false;ball.holder=null;
+ball.vx=Math.cos(angle)*8;ball.vy=Math.sin(angle)*8;
+showMsg('🥅 Shoot!');
+}
+
+function switchPlayer(){
+let nearest=null,minD=Infinity;
+homePlayers.forEach(p=>{
+if(p===controlled)return;
+const d=Math.sqrt((ball.x-p.x)**2+(ball.y-p.y)**2);
+if(d<minD){minD=d;nearest=p}
+});
+if(nearest)controlled=nearest;
+}
+
+// Touch controls
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+const t=e.touches[0];
+swipeStart={x:t.clientX,y:t.clientY};swiping=true;
+// Tap on player to switch
+homePlayers.forEach(p=>{
+const dx=t.clientX-p.x,dy=t.clientY-p.y;
+if(Math.sqrt(dx*dx+dy*dy)<20)controlled=p;
+});
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+e.preventDefault();
+if(swiping){
+swipeStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+}
+// Move controlled player toward touch
+if(controlled&&!ball.holder){
+controlled.targetX=e.touches[0].clientX;
+controlled.targetY=e.touches[0].clientY;
+}
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{
+if(!swiping||!controlled)return;
+const t=e.changedTouches[0];
+const dx=t.clientX-controlled.x,dy=t.clientY-controlled.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+if(dist>30&&ball.holder===controlled){
+// Swipe to kick
+const power=Math.min(dist/50,1);
+const angle=Math.atan2(dy,dx);
+ball.holder.hasBall=false;ball.holder=null;
+ball.vx=Math.cos(angle)*power*10;ball.vy=Math.sin(angle)*power*10;
+}
+swiping=false;swipeStart=null;
+});
+
+// Mouse fallback
+canvas.addEventListener('click',e=>{
+if(!controlled)return;
+controlled.targetX=e.clientX;controlled.targetY=e.clientY;
+});
+
+function startGame(){
+document.getElementById('startScreen').style.display='none';
+document.getElementById('hud').style.display='flex';
+document.getElementById('controls').style.display='flex';
+gameRunning=true;
+initGame();
+document.querySelector('#homeTeam .team-name').textContent=TEAMS[selectedTeam].name;
+requestAnimationFrame(gameLoop);
+}
+
+let lastTime=0;
+function gameLoop(ts){
+if(!gameRunning)return;
+const dt=Math.min((ts-lastTime)/1000,.05);
+lastTime=ts;gameTime+=dt;
+matchTime-=dt;
+if(matchTime<=0){
+gameRunning=false;
+document.getElementById('gameOver').style.display='flex';
+document.getElementById('finalScore').textContent=homeScore+' - '+awayScore;
+document.getElementById('resultText').textContent=homeScore>awayScore?'🏆 Victory!':homeScore<awayScore?'💀 Defeat':'🤝 Draw';
+return;
+}
+const mins=Math.floor(matchTime/60),secs=Math.floor(matchTime%60);
+document.getElementById('timer').textContent=String(mins).padStart(2,'0')+':'+String(secs).padStart(2,'0');
+players.forEach(p=>p.update(dt));
+updateBall(dt);
+aiUpdate(dt);
+drawField();
+players.forEach(p=>p.draw());
+drawBall();
+drawArrow();
+requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>

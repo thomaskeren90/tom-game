@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Cue Master</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#0a1a0a;font-family:'Segoe UI',sans-serif;overflow:hidden;user-select:none;display:flex;align-items:center;justify-content:center;height:100vh}
+#startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a1a0a,#1a2a1a);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#startScreen h1{font-size:2.8em;color:#2ecc71;text-shadow:0 0 30px #27ae60;margin-bottom:10px}
+.subtitle{color:#888;margin-bottom:25px}
+.btn{padding:12px 30px;font-size:1.1em;border:2px solid #2ecc71;background:transparent;color:#2ecc71;border-radius:8px;cursor:pointer;margin:5px;transition:all .3s}
+.btn:hover,.btn:active{background:#2ecc71;color:#0a1a0a}
+canvas{display:block}
+#hud{position:fixed;top:0;left:0;width:100%;padding:8px 15px;display:none;justify-content:space-between;align-items:center;background:rgba(0,0,0,.8);z-index:10;color:#fff;font-size:.85em}
+#turnInfo{font-size:1.1em;font-weight:bold}
+#powerBar{position:fixed;bottom:15px;right:15px;width:25px;height:150px;background:#222;border:2px solid #444;border-radius:12px;z-index:10;display:none;overflow:hidden}
+#powerFill{position:absolute;bottom:0;width:100%;background:linear-gradient(0deg,#2ecc71,#e74c3c);transition:height .05s;border-radius:10px}
+#msg{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:20;color:#f1c40f;font-size:1.2em;text-shadow:0 0 10px #000;pointer-events:none;transition:opacity .5s}
+#gameOver{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;color:#fff}
+#gameOver h2{font-size:2.5em;color:#2ecc71}
+#foulMsg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;background:rgba(231,76,60,.9);color:#fff;padding:15px 30px;border-radius:10px;font-size:1.3em;display:none;animation:fadeInOut 2s}
+@keyframes fadeInOut{0%{opacity:0;transform:translate(-50%,-50%) scale(.8)}20%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+#aimLine{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}
+</style>
+</head>
+<body>
+<div id="startScreen">
+<h1>🎱 Cue Master</h1>
+<div class="subtitle">Fair play pool. No pay-to-win. Pure skill.</div>
+<button class="btn" onclick="startGame()">▶ Start Game</button>
+<div style="color:#555;margin-top:15px;font-size:.8em">Drag to aim • Hold to set power • Release to shoot</div>
+</div>
+<div id="hud">
+<div id="turnInfo">Your Turn (Solids)</div>
+<div id="ballRack"></div>
+<div id="score">0 - 0</div>
+</div>
+<canvas id="gameCanvas"></canvas>
+<div id="powerBar"><div id="powerFill"></div></div>
+<div id="msg"></div>
+<div id="foulMsg"></div>
+<div id="gameOver"><h2 id="winnerText"></h2><button class="btn" onclick="location.reload()" style="margin-top:20px">Play Again</button></div>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+let W,H,TABLE_W,TABLE_H,CELL;
+const BALL_R=8,POCKET_R=18;
+const BALL_COLORS=['#fff','#f1c40f','#2980b9','#e74c3c','#9b59b6','#e67e22','#27ae60','#8e44ad','#2c3e50'];
+let balls=[],pockets=[];
+let currentPlayer=0,isPlayerTurn=true,playerType=null; // 'solids' or 'stripes'
+let aiming=false,aimAngle=0,power=0,charging=false;
+let moving=false,foul=false,firstHit=null,ballPocketed=false;
+let scores=[0,0],pocketedBalls=[[],[]];
+let aiThinking=false;
+
+function resize(){
+const maxW=window.innerWidth-20,maxH=window.innerHeight-80;
+TABLE_W=Math.min(maxW*.95,600);
+TABLE_H=TABLE_W*.55;
+CELL=TABLE_W/30;
+canvas.width=TABLE_W+CELL*4;canvas.height=TABLE_H+CELL*4;
+}
+window.addEventListener('resize',resize);resize();
+
+class Ball{
+constructor(x,y,num){
+this.x=x;this.y=y;this.vx=0;this.vy=0;this.num=num;this.pocketed=false;this.r=BALL_R;
+this.color=BALL_COLORS[num===0?0:num<=8?num:BALL_COLORS[num-8]];
+this.striped=num>8;
+}
+update(dt){
+if(this.pocketed)return;
+const friction=.985;
+this.vx*=friction;this.vy*=friction;
+if(Math.abs(this.vx)<.01)this.vx=0;
+if(Math.abs(this.vy)<.01)this.vy=0;
+this.x+=this.vx*dt*60;this.y+=this.vy*dt*60;
+// Walls
+const l=CELL*2,t=CELL*2,r=l+TABLE_W,b=t+TABLE_H;
+if(this.x-this.r<l){this.x=l+this.r;this.vx*=-.7}
+if(this.x+this.r>r){this.x=r-this.r;this.vx*=-.7}
+if(this.y-this.r<t){this.y=t+this.r;this.vy*=-.7}
+if(this.y+this.r>b){this.y=b-this.r;this.vy*=-.7}
+}
+draw(){
+if(this.pocketed)return;
+const x=this.x,y=this.y;
+ctx.fillStyle=this.striped?'#fff':this.color;
+ctx.beginPath();ctx.arc(x,y,this.r,0,Math.PI*2);ctx.fill();
+if(this.striped){
+ctx.save();ctx.beginPath();ctx.arc(x,y,this.r,0,Math.PI*2);ctx.clip();
+ctx.fillStyle=this.color;
+ctx.fillRect(x-this.r,y-this.r*.5,this.r*2,this.r);
+ctx.restore();
+}
+ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=1;ctx.stroke();
+if(this.num>0){
+ctx.fillStyle=this.num<=8?'#fff':'#000';ctx.font='bold 7px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(this.num,x,y);
+}
+// Shadow
+ctx.fillStyle='rgba(0,0,0,.2)';ctx.beginPath();ctx.ellipse(x+2,y+3,this.r*.8,this.r*.4,0,0,Math.PI*2);ctx.fill();
+}
+}
+
+function initBalls(){
+balls=[];
+const l=CELL*2,t=CELL*2;
+const cx=l+TABLE_W*.7,cy=t+TABLE_H/2;
+// Cue ball
+balls.push(new Ball(l+TABLE_W*.25,cy,0));
+// Rack (triangle)
+let idx=1;
+for(let row=0;row<5;row++){
+for(let col=0;col<=row;col++){
+const x=cx+row*BALL_R*1.8;
+const y=cy+(col-row/2)*BALL_R*2;
+if(idx<=15)balls.push(new Ball(x,y,idx));
+idx++;
+}
+}
+// Pockets
+pockets=[
+{x:CELL*2,y:CELL*2},{x:CELL*2+TABLE_W/2,y:CELL*2-5},{x:CELL*2+TABLE_W,y:CELL*2},
+{x:CELL*2,y:CELL*2+TABLE_H},{x:CELL*2+TABLE_W/2,y:CELL*2+TABLE_H+5},{x:CELL*2+TABLE_W,y:CELL*2+TABLE_H}
+];
+}
+
+function checkCollisions(){
+for(let i=0;i<balls.length;i++){
+for(let j=i+1;j<balls.length;j++){
+const a=balls[i],b=balls[j];
+if(a.pocketed||b.pocketed)continue;
+const dx=b.x-a.x,dy=b.y-a.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+const minD=a.r+b.r;
+if(dist<minD&&dist>0){
+const nx=dx/dist,ny=dy/dist;
+const overlap=minD-dist;
+a.x-=nx*overlap/2;a.y-=ny*overlap/2;
+b.x+=nx*overlap/2;b.y+=ny*overlap/2;
+const dvx=a.vx-b.vx,dvy=a.vy-b.vy;
+const dvn=dvx*nx+dvy*ny;
+if(dvn>0){
+a.vx-=dvn*nx;a.vy-=dvn*ny;
+b.vx+=dvn*nx;b.vy+=dvn*ny;
+// First hit tracking
+if(!firstHit){
+if(a.num===0)firstHit=b.num;
+else if(b.num===0)firstHit=a.num;
+}
+}
+}
+}
+}
+}
+
+function checkPockets(){
+balls.forEach(b=>{
+if(b.pocketed)return;
+pockets.forEach(p=>{
+const dx=b.x-p.x,dy=b.y-p.y;
+if(Math.sqrt(dx*dx+dy*dy)<POCKET_R){
+b.pocketed=true;b.vx=0;b.vy=0;
+if(b.num===0){
+foul=true;showFoul('Cue ball scratched!');
+setTimeout(()=>{b.pocketed=false;b.x=CELL*2+TABLE_W*.25;b.y=CELL*2+TABLE_H/2},1000);
+}else{
+ballPocketed=true;
+if(b.num===8){
+if(currentPlayer===0&&pocketedBalls[0].length===7||
+currentPlayer===1&&pocketedBalls[1].length===7){
+endGame(currentPlayer);
+}else{
+endGame(1-currentPlayer);
+}
+return;
+}
+const isSolid=b.num<=7;
+const isStripe=b.num>=9;
+if(playerType===null){
+playerType=isSolid?'solids':'stripes';
+showMsg('You are '+playerType+'!');
+}
+pocketedBalls[currentPlayer].push(b.num);
+scores[currentPlayer]++;
+}
+}
+});
+});
+}
+
+function allStopped(){return balls.every(b=>b.pocketed||Math.abs(b.vx)<.01&&Math.abs(b.vy)<.01)}
+
+function shoot(angle,pwr){
+const cue=balls[0];
+if(cue.pocketed)return;
+moving=true;foul=false;firstHit=null;ballPocketed=false;
+const maxPwr=15;
+cue.vx=Math.cos(angle)*pwr*maxPwr;
+cue.vy=Math.sin(angle)*pwr*maxPwr;
+}
+
+function afterShot(){
+// Check fouls
+if(foul){
+showFoul('Foul! Turn passes.');
+switchTurn();return;
+}
+if(!firstHit&&!ballPocketed){
+showFoul('No ball hit! Foul.');
+switchTurn();return;
+}
+// Check if player hit correct type
+if(playerType&&firstHit){
+const isSolid=firstHit<=7&&firstHit>0;
+const isStripe=firstHit>=9;
+const correctType=(playerType==='solids'&&isSolid)||(playerType==='stripes'&&isStripe);
+if(!correctType&&firstHit!==8){
+showFoul('Wrong ball first! Foul.');
+switchTurn();return;
+}
+}
+if(!ballPocketed)switchTurn();
+else showMsg('Nice shot! Go again.');
+}
+
+function switchTurn(){
+currentPlayer=1-currentPlayer;
+isPlayerTurn=currentPlayer===0;
+aiThinking=false;
+updateHUD();
+if(!isPlayerTurn)setTimeout(aiTurn,1000);
+}
+
+function aiTurn(){
+aiThinking=true;
+// Simple AI: aim at closest non-8 ball
+const cue=balls[0];
+let targets=balls.filter(b=>!b.pocketed&&b.num>0&&b.num!==8);
+if(targets.length===0)targets=balls.filter(b=>!b.pocketed&&b.num===8);
+if(targets.length===0)return;
+targets.sort((a,b)=>{
+const da=Math.sqrt((a.x-cue.x)**2+(a.y-cue.y)**2);
+const db=Math.sqrt((b.x-cue.x)**2+(b.y-cue.y)**2);
+return da-db;
+});
+const target=targets[0];
+const angle=Math.atan2(target.y-cue.y,target.x-cue.x);
+const pwr=.3+Math.random()*.4;
+showMsg('🤖 Opponent shooting...');
+setTimeout(()=>{
+shoot(angle,pwr);
+aiThinking=false;
+},1000);
+}
+
+function drawTable(){
+const l=CELL*2,t=CELL*2;
+// Outer frame
+ctx.fillStyle='#5D4037';ctx.fillRect(l-CELL,t-CELL,TABLE_W+CELL*2,TABLE_H+CELL*2);
+ctx.fillStyle='#4E342E';ctx.fillRect(l-CELL*.5,t-CELL*.5,TABLE_W+CELL,TABLE_H+CELL);
+// Felt
+const felt=ctx.createLinearGradient(l,t,l+TABLE_W,t+TABLE_H);
+felt.addColorStop(0,'#1B5E20');felt.addColorStop(1,'#2E7D32');
+ctx.fillStyle=felt;ctx.fillRect(l,t,TABLE_W,TABLE_H);
+// Cushion lines
+ctx.strokeStyle='#1B5E20';ctx.lineWidth=3;
+ctx.strokeRect(l+5,t+5,TABLE_W-10,TABLE_H-10);
+// Pockets
+pockets.forEach(p=>{
+ctx.fillStyle='#111';ctx.beginPath();ctx.arc(p.x,p.y,POCKET_R,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#333';ctx.beginPath();ctx.arc(p.x,p.y,POCKET_R-3,0,Math.PI*2);ctx.fill();
+});
+// Head string
+ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.setLineDash([5,5]);
+ctx.beginPath();ctx.moveTo(l+TABLE_W*.25,t);ctx.lineTo(l+TABLE_W*.25,t+TABLE_H);ctx.stroke();
+ctx.setLineDash([]);
+}
+
+function drawCue(){
+if(!allStopped()||aiming===false)return;
+const cue=balls[0];if(cue.pocketed)return;
+const len=120;
+const cx=cue.x+Math.cos(aimAngle)*(aiming?power*30+20:20);
+const cy=cue.y+Math.sin(aimAngle)*(aiming?power*30+20:20);
+const ex=cue.x+Math.cos(aimAngle)*len;
+const ey=cue.y+Math.sin(aimAngle)*len;
+ctx.strokeStyle='#D7CCC8';ctx.lineWidth=4;ctx.lineCap='round';
+ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(ex,ey);ctx.stroke();
+// Aim line
+ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.setLineDash([5,5]);
+ctx.beginPath();ctx.moveTo(cue.x,cue.y);
+ctx.lineTo(cue.x+Math.cos(aimAngle)*300,cue.y+Math.sin(aimAngle)*300);ctx.stroke();
+ctx.setLineDash([]);
+}
+
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+drawTable();
+balls.forEach(b=>b.draw());
+drawCue();
+}
+
+function updateHUD(){
+const pName=currentPlayer===0?'Your':'AI';
+const type=playerType||'not assigned';
+document.getElementById('turnInfo').textContent=pName+"'s Turn ("+type+")";
+document.getElementById('turnInfo').style.color=currentPlayer===0?'#2ecc71':'#e74c3c';
+document.getElementById('score').textContent=scores[0]+' - '+scores[1];
+}
+
+function showMsg(t,d=2000){const el=document.getElementById('msg');el.textContent=t;el.style.opacity=1;setTimeout(()=>el.style.opacity=0,d)}
+function showFoul(t){const el=document.getElementById('foulMsg');el.textContent=t;el.style.display='block';setTimeout(()=>el.style.display='none',2000)}
+
+function endGame(winner){
+gameRunning=false;
+document.getElementById('gameOver').style.display='flex';
+document.getElementById('winnerText').textContent=winner===0?'🏆 You Win!':'🤖 AI Wins!';
+}
+
+let gameRunning=false;
+function startGame(){
+document.getElementById('startScreen').style.display='none';
+document.getElementById('hud').style.display='flex';
+document.getElementById('powerBar').style.display='block';
+gameRunning=true;
+initBalls();updateHUD();
+requestAnimationFrame(gameLoop);
+}
+
+function gameLoop(ts){
+if(!gameRunning)return;
+balls.forEach(b=>b.update(1));
+checkCollisions();checkPockets();
+if(moving&&allStopped()){
+moving=false;afterShot();
+}
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+// Input
+let dragStart=null;
+canvas.addEventListener('mousedown',e=>{
+if(!allStopped()||!isPlayerTurn||aiThinking)return;
+const rect=canvas.getBoundingClientRect();
+const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+const cue=balls[0];
+aimAngle=Math.atan2(my-cue.y,mx-cue.x);
+aiming=true;charging=true;power=0;
+dragStart={x:mx,y:my};
+});
+canvas.addEventListener('mousemove',e=>{
+if(!aiming)return;
+const rect=canvas.getBoundingClientRect();
+const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+const cue=balls[0];
+aimAngle=Math.atan2(my-cue.y,mx-cue.x);
+if(charging){power=Math.min(1,Math.hypot(mx-dragStart.x,my-dragStart.y)/150);
+document.getElementById('powerFill').style.height=power*100+'%'}
+});
+canvas.addEventListener('mouseup',e=>{
+if(!aiming)return;aiming=false;
+if(power>.05){shoot(aimAngle,power);isPlayerTurn=false}
+charging=false;power=0;
+document.getElementById('powerFill').style.height='0';
+});
+// Touch
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+const t=e.touches[0];const rect=canvas.getBoundingClientRect();
+const mx=t.clientX-rect.left,my=t.clientY-rect.top;
+if(!allStopped()||!isPlayerTurn||aiThinking)return;
+const cue=balls[0];
+aimAngle=Math.atan2(my-cue.y,mx-cue.x);
+aiming=true;charging=true;power=0;dragStart={x:mx,y:my};
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+e.preventDefault();
+if(!aiming)return;
+const t=e.touches[0];const rect=canvas.getBoundingClientRect();
+const mx=t.clientX-rect.left,my=t.clientY-rect.top;
+const cue=balls[0];
+aimAngle=Math.atan2(my-cue.y,mx-cue.x);
+if(charging){power=Math.min(1,Math.hypot(mx-dragStart.x,my-dragStart.y)/150);
+document.getElementById('powerFill').style.height=power*100+'%'}
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+if(!aiming)return;aiming=false;
+if(power>.05){shoot(aimAngle,power);isPlayerTurn=false}
+charging=false;power=0;
+document.getElementById('powerFill').style.height='0';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Ludo Arena</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#1a0a2e;font-family:'Segoe UI',sans-serif;overflow:hidden;user-select:none;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}
+#startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#1a0a2e,#16213e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#startScreen h1{font-size:2.8em;color:#f1c40f;text-shadow:0 0 30px #f39c12;margin-bottom:10px}
+.subtitle{color:#e74c3c;font-size:1.1em;margin-bottom:25px}
+.btn{padding:12px 30px;font-size:1.1em;border:2px solid #f1c40f;background:transparent;color:#f1c40f;border-radius:8px;cursor:pointer;margin:5px;transition:all .3s}
+.btn:hover,.btn:active{background:#f1c40f;color:#1a0a2e;transform:scale(1.05)}
+#gameArea{display:none;position:relative}
+canvas{display:block}
+#hud{position:fixed;top:0;left:0;width:100%;padding:8px 15px;display:none;justify-content:space-between;align-items:center;background:rgba(0,0,0,.8);z-index:10;color:#fff;font-size:.85em}
+#turnInfo{font-size:1.1em;font-weight:bold}
+#diceArea{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10;display:none;text-align:center}
+#dice{width:70px;height:70px;background:#fff;border-radius:12px;font-size:2.5em;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;cursor:pointer;transition:transform .1s;box-shadow:0 4px 15px rgba(0,0,0,.3);font-weight:bold}
+#dice.rolling{animation:diceRoll .5s ease-out}
+@keyframes diceRoll{
+0%{transform:rotate(0) scale(1)}25%{transform:rotate(90deg) scale(1.2)}
+50%{transform:rotate(180deg) scale(.9)}75%{transform:rotate(270deg) scale(1.1)}
+100%{transform:rotate(360deg) scale(1)}
+}
+#rollBtn{padding:10px 25px;font-size:1em;border:2px solid #f1c40f;background:transparent;color:#f1c40f;border-radius:8px;cursor:pointer}
+#rollBtn:disabled{opacity:.4;cursor:not-allowed}
+#msg{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:20;color:#f1c40f;font-size:1.2em;text-shadow:0 0 10px #000;pointer-events:none;transition:opacity .5s}
+#gameOver{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;color:#fff}
+#gameOver h2{font-size:2.5em;color:#f1c40f;text-shadow:0 0 30px #f39c12}
+.player-indicators{display:flex;gap:8px;flex-wrap:wrap}
+.pi{padding:4px 10px;border-radius:15px;font-size:.8em;font-weight:bold;border:2px solid transparent}
+.pi.active{border-color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+#seedDisplay{position:fixed;bottom:5px;right:10px;color:#444;font-size:.7em;z-index:10}
+</style>
+</head>
+<body>
+<div id="startScreen">
+<h1>🎲 Ludo Arena</h1>
+<div class="subtitle">Fair dice. Fast games. No ads.</div>
+<button class="btn" onclick="startGame(2)">👥 2 Players</button>
+<button class="btn" onclick="startGame(3)">👥 3 Players</button>
+<button class="btn" onclick="startGame(4)">👥 4 Players</button>
+<div style="color:#666;margin-top:15px;font-size:.8em">🎲 Provably fair RNG with visible seed</div>
+</div>
+<div id="hud">
+<div class="player-indicators" id="playerInds"></div>
+<div id="turnInfo"></div>
+</div>
+<div id="gameArea"><canvas id="gameCanvas"></canvas></div>
+<div id="diceArea">
+<div id="dice" onclick="rollDice()">🎲</div>
+<button id="rollBtn" onclick="rollDice()">Roll Dice</button>
+</div>
+<div id="msg"></div>
+<div id="gameOver"><h2 id="winnerText"></h2><button class="btn" onclick="location.reload()" style="margin-top:20px">Play Again</button></div>
+<div id="seedDisplay"></div>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const PLAYER_COLORS=['#e74c3c','#3498db','#2ecc71','#f39c12'];
+const PLAYER_NAMES=['Red','Blue','Green','Yellow'];
+const SAFE_POSITIONS=[0,8,13,21,26,34,39,47]; // safe spots on track
+let numPlayers=2,boardSize,cellSize,centerX,centerY;
+let currentPlayer=0,diceValue=0,canRoll=true,movingPiece=null;
+let players=[],gameSeed,gameRunning=false;
+let animQueue=[],confetti=[];
+
+// Provably fair RNG
+class FairRNG{
+constructor(seed){this.seed=seed;this.counter=0}
+next(){
+this.counter++;
+let s=this.seed+this.counter;
+s=Math.sin(s*9301+49297)%1;
+return Math.abs(s);
+}
+nextInt(min,max){return Math.floor(this.next()*(max-min+1))+min}
+}
+let rng;
+
+function resize(){
+const s=Math.min(window.innerWidth,window.innerHeight-120);
+canvas.width=canvas.height=s;
+boardSize=s;cellSize=s/15;centerX=centerY=s/2;
+}
+window.addEventListener('resize',()=>{resize();if(gameRunning)draw()});resize();
+
+// Board positions: 52 main track + 6 home stretch per player
+function getTrackPos(pos,playerIdx){
+// 0-51 main track, offset by player
+const adjusted=(pos+playerIdx*13)%52;
+const angle=adjusted/52*Math.PI*2-Math.PI/2;
+const r=boardSize*.35;
+return{x:centerX+Math.cos(angle)*r,y:centerY+Math.sin(angle)*r};
+}
+function getHomeStretchPos(step,playerIdx){
+const startAngles=[-Math.PI/2,0,Math.PI/2,Math.PI];
+const angle=startAngles[playerIdx];
+const r=boardSize*.35*(1-step/6);
+return{x:centerX+Math.cos(angle)*r,y:centerY+Math.sin(angle)*r};
+}
+function getHomePos(playerIdx){
+const angles=[-Math.PI/2,0,Math.PI/2,Math.PI];
+return{x:centerX+Math.cos(angles[playerIdx])*boardSize*.05,y:centerY+Math.sin(angles[playerIdx])*boardSize*.05};
+}
+function getStartYardPos(pieceIdx,playerIdx){
+const baseAngles=[-Math.PI/2,0,Math.PI/2,Math.PI];
+const angle=baseAngles[playerIdx]-.3+pieceIdx*.2;
+const r=boardSize*.42;
+return{x:centerX+Math.cos(angle)*r,y:centerY+Math.sin(angle)*r};
+}
+
+function initPlayers(){
+players=[];
+for(let i=0;i<numPlayers;i++){
+const pieces=[];
+for(let j=0;j<4;j++){
+pieces.push({pos:-1,finished:false,animX:0,animY:0});
+const yard=getStartYardPos(j,i);
+pieces[j].animX=yard.x;pieces[j].animY=yard.y;
+}
+players.push({pieces,name:PLAYER_NAMES[i],color:PLAYER_COLORS[i],finished:0});
+}
+}
+
+function draw(){
+ctx.clearRect(0,0,boardSize,boardSize);
+// Board background
+ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,boardSize,boardSize);
+// Draw cross-shaped board
+const hs=boardSize*.42;
+ctx.fillStyle='#2d1b4e';
+ctx.fillRect(centerX-hs/6,centerY-hs,hs/3,hs*2);
+ctx.fillRect(centerX-hs,centerY-hs/6,hs*2,hs/3);
+// Center
+ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(centerX,centerY,boardSize*.06,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#1a1a2e';ctx.font='bold '+boardSize*.04+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText('🏠',centerX,centerY);
+// Home areas (triangles)
+const triColors=['rgba(231,76,60,.3)','rgba(52,152,219,.3)','rgba(46,204,113,.3)','rgba(241,196,15,.3)'];
+const triAngles=[-Math.PI/2,0,Math.PI/2,Math.PI];
+for(let i=0;i<numPlayers;i++){
+ctx.fillStyle=triColors[i];
+ctx.beginPath();
+ctx.moveTo(centerX,centerY);
+const a1=triAngles[i]-.3,a2=triAngles[i]+.3;
+ctx.lineTo(centerX+Math.cos(a1)*boardSize*.35,centerY+Math.sin(a1)*boardSize*.35);
+ctx.lineTo(centerX+Math.cos(a2)*boardSize*.35,centerY+Math.sin(a2)*boardSize*.35);
+ctx.fill();
+}
+// Track cells
+for(let i=0;i<52;i++){
+const pos=getTrackPos(i,0);
+const isSafe=SAFE_POSITIONS.includes(i);
+ctx.fillStyle=isSafe?'rgba(241,196,15,.3)':'rgba(255,255,255,.1)';
+ctx.beginPath();ctx.arc(pos.x,pos.y,cellSize*.4,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.stroke();
+}
+// Home yards
+for(let i=0;i<numPlayers;i++){
+for(let j=0;j<4;j++){
+const pos=getStartYardPos(j,i);
+ctx.fillStyle=PLAYER_COLORS[i]+'44';
+ctx.beginPath();ctx.arc(pos.x,pos.y,cellSize*.45,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle=PLAYER_COLORS[i];ctx.lineWidth=2;ctx.stroke();
+}
+}
+// Pieces
+for(let p=0;p<numPlayers;p++){
+players[p].pieces.forEach((piece,idx)=>{
+if(piece.pos===-1&&!piece.finished){
+const yard=getStartYardPos(idx,p);
+piece.animX+=(yard.x-piece.animX)*.2;
+piece.animY+=(yard.y-piece.animY)*.2;
+}else if(piece.finished){
+const home=getHomePos(p);
+piece.animX+=(home.x-piece.animX)*.2;
+piece.animY+=(home.y-piece.animY)*.2;
+}
+const x=piece.animX,y=piece.animY;
+// Shadow
+ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.arc(x+2,y+2,cellSize*.35,0,Math.PI*2);ctx.fill();
+// Piece
+ctx.fillStyle=PLAYER_COLORS[p];ctx.beginPath();ctx.arc(x,y,cellSize*.35,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+ctx.fillStyle='#fff';ctx.font='bold '+cellSize*.3+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(idx+1,x,y);
+});
+}
+// Confetti
+confetti.forEach(c=>{
+ctx.globalAlpha=c.life;ctx.fillStyle=c.color;
+ctx.fillRect(c.x,c.y,6,6);
+ctx.globalAlpha=1;
+});
+}
+
+function showMsg(text,dur=2000){
+const el=document.getElementById('msg');
+el.textContent=text;el.style.opacity=1;
+setTimeout(()=>el.style.opacity=0,dur);
+}
+
+function updateHUD(){
+const inds=document.getElementById('playerInds');
+inds.innerHTML=players.map((p,i)=>`<span class="pi ${i===currentPlayer?'active':''}" style="color:${p.color};background:${p.color}22">${p.name} (${p.finished}/4)</span>`).join('');
+document.getElementById('turnInfo').textContent=PLAYER_NAMES[currentPlayer]+"'s turn";
+document.getElementById('turnInfo').style.color=PLAYER_COLORS[currentPlayer];
+}
+
+function getValidMoves(diceVal){
+const moves=[];
+const player=players[currentPlayer];
+player.pieces.forEach((piece,idx)=>{
+if(piece.finished)return;
+if(piece.pos===-1){
+if(diceVal===6)moves.push(idx);
+}else if(piece.pos+diceVal<=57){
+moves.push(idx);
+}
+});
+return moves;
+}
+
+function movePiece(pieceIdx){
+const piece=players[currentPlayer].pieces[pieceIdx];
+const diceVal=diceValue;
+if(piece.pos===-1&&diceVal===6){
+piece.pos=0;
+const pos=getTrackPos(0,currentPlayer);
+animatePieceTo(piece,pos.x,pos.y);
+showMsg('🟢 Piece entered the board!');
+}else{
+piece.pos+=diceVal;
+if(piece.pos>=57){
+piece.pos=57;piece.finished=true;
+players[currentPlayer].finished++;
+const home=getHomePos(currentPlayer);
+animatePieceTo(piece,home.x,home.y);
+showMsg('🏠 Piece reached home! ('+players[currentPlayer].finished+'/4)');
+if(players[currentPlayer].finished===4){
+endGame(currentPlayer);return;
+}
+}else if(piece.pos<=51){
+const pos=getTrackPos(piece.pos,currentPlayer);
+animatePieceTo(piece,pos.x,pos.y);
+// Check capture
+checkCapture(piece.pos,currentPlayer);
+}else{
+const homeStep=piece.pos-52;
+const pos=getHomeStretchPos(homeStep,currentPlayer);
+animatePieceTo(piece,pos.x,pos.y);
+}
+}
+// Extra turn on 6
+if(diceVal===6){
+canRoll=true;showMsg('🎲 Rolled 6! Roll again!');
+}else{
+currentPlayer=(currentPlayer+1)%numPlayers;
+canRoll=true;
+}
+updateHUD();
+}
+
+function checkCapture(pos,playerIdx){
+const adjustedPos=(pos+playerIdx*13)%52;
+if(SAFE_POSITIONS.includes(adjustedPos))return;
+players.forEach((p,pi)=>{
+if(pi===playerIdx)return;
+p.pieces.forEach(piece=>{
+if(piece.pos<0||piece.finished)return;
+const theirPos=(piece.pos+pi*13)%52;
+if(theirPos===adjustedPos){
+// Capture!
+piece.pos=-1;
+const yard=getStartYardPos(p.pieces.indexOf(piece),pi);
+animatePieceTo(piece,yard.x,yard.y);
+showMsg('💥 Captured '+PLAYER_NAMES[pi]+"'s piece!");
+}
+});
+});
+}
+
+function animatePieceTo(piece,targetX,targetY){
+piece.animX+=(targetX-piece.animX)*.1;
+piece.animY+=(targetY-piece.animY)*.1;
+}
+
+function rollDice(){
+if(!canRoll||!gameRunning)return;
+canRoll=false;
+diceValue=rng.nextInt(1,6);
+const diceEl=document.getElementById('dice');
+diceEl.classList.add('rolling');
+const faces=['⚀','⚁','⚂','⚃','⚄','⚅'];
+let rollCount=0;
+const rollAnim=setInterval(()=>{
+diceEl.textContent=faces[Math.floor(Math.random()*6)];
+rollCount++;
+if(rollCount>10){
+clearInterval(rollAnim);
+diceEl.textContent=faces[diceValue-1];
+diceEl.classList.remove('rolling');
+showMsg('🎲 Rolled '+diceValue+'!');
+// Show valid moves
+const moves=getValidMoves(diceValue);
+if(moves.length===0){
+showMsg('No valid moves. Passing...');
+setTimeout(()=>{
+currentPlayer=(currentPlayer+1)%numPlayers;
+canRoll=true;updateHUD();
+},1000);
+}else if(moves.length===1){
+setTimeout(()=>movePiece(moves[0]),500);
+}else{
+// Auto-select for simplicity (pick first)
+showMsg('Auto-selecting piece...');
+setTimeout(()=>movePiece(moves[0]),800);
+}
+}
+},60);
+// Update seed display
+document.getElementById('seedDisplay').textContent='Seed: '+gameSeed+' | Roll #'+rng.counter+' | Value: '+diceValue;
+}
+
+function endGame(winnerIdx){
+gameRunning=false;
+document.getElementById('gameOver').style.display='flex';
+document.getElementById('winnerText').textContent='🏆 '+PLAYER_NAMES[winnerIdx]+' Wins!';
+document.getElementById('winnerText').style.color=PLAYER_COLORS[winnerIdx];
+// Confetti
+for(let i=0;i<100;i++){
+confetti.push({x:Math.random()*boardSize,y:Math.random()*boardSize-boardSize,
+vx:(Math.random()-.5)*3,vy:Math.random()*3+2,
+life:1,color:PLAYER_COLORS[Math.floor(Math.random()*numPlayers)]});
+}
+}
+
+function startGame(num){
+numPlayers=num;
+document.getElementById('startScreen').style.display='none';
+document.getElementById('hud').style.display='flex';
+document.getElementById('gameArea').style.display='block';
+document.getElementById('diceArea').style.display='block';
+gameSeed=Math.floor(Math.random()*999999);
+rng=new FairRNG(gameSeed);
+document.getElementById('seedDisplay').textContent='Seed: '+gameSeed+' | Fair RNG';
+initPlayers();updateHUD();
+gameRunning=true;
+requestAnimationFrame(gameLoop);
+}
+
+let lastTime=0;
+function gameLoop(ts){
+if(!gameRunning)return;
+const dt=Math.min((ts-lastTime)/1000,.1);
+lastTime=ts;
+// Smooth piece animations
+players.forEach(p=>{
+p.pieces.forEach(piece=>{
+const target=piece.pos===-1?getStartYardPos(p.pieces.indexOf(piece),players.indexOf(p)):
+piece.finished?getHomePos(players.indexOf(p)):
+piece.pos<=51?getTrackPos(piece.pos,players.indexOf(p)):
+getHomeStretchPos(piece.pos-52,players.indexOf(p));
+piece.animX+=(target.x-piece.animX)*.15;
+piece.animY+=(target.y-piece.animY)*.15;
+});
+});
+confetti=confetti.filter(c=>{c.x+=c.vx;c.y+=c.vy;c.vy+=.05;c.life-=dt;return c.life>0});
+draw();
+requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>

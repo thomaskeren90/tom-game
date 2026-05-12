@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Block Crunch</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#0a0a1a;font-family:'Segoe UI',sans-serif;overflow:hidden;user-select:none}
+canvas{display:block;margin:0 auto}
+#startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a0a1a,#1a0a2e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#startScreen h1{font-size:2.8em;background:linear-gradient(135deg,#e74c3c,#f39c12,#2ecc71,#3498db);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px;animation:shimmer 3s ease-in-out infinite}
+@keyframes shimmer{0%,100%{filter:hue-rotate(0deg)}50%{filter:hue-rotate(90deg)}}
+.subtitle{color:#888;font-size:1em;margin-bottom:25px}
+.modes{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:350px}
+.btn{padding:12px 22px;font-size:1em;border:2px solid #e74c3c;background:transparent;color:#e74c3c;border-radius:8px;cursor:pointer;transition:all .3s}
+.btn:hover,.btn:active{background:#e74c3c;color:#fff;transform:scale(1.05)}
+.btn.small{padding:8px 14px;font-size:.85em}
+#hud{position:fixed;top:0;left:0;width:100%;padding:10px;display:none;justify-content:space-between;align-items:center;background:rgba(0,0,0,.8);z-index:10;color:#fff;font-size:.9em}
+#hud .score{font-size:1.5em;font-weight:bold;background:linear-gradient(90deg,#e74c3c,#f39c12);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#hud .combo{color:#f39c12;font-weight:bold}
+#gameOver{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;color:#fff}
+#gameOver h2{font-size:2.5em;margin-bottom:10px;background:linear-gradient(90deg,#e74c3c,#f39c12);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat{color:#aaa;margin:5px 0;font-size:1.1em}
+#nextPiece{position:fixed;top:60px;right:15px;z-index:10;display:none}
+#timer{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:10;display:none;color:#f39c12;font-size:1.3em;font-weight:bold}
+</style>
+</head>
+<body>
+<div id="startScreen">
+<h1>🧩 Block Crunch</h1>
+<div class="subtitle">No ads. No paywall. Pure puzzle.</div>
+<div class="modes">
+<button class="btn" onclick="startGame('classic')">🎯 Classic</button>
+<button class="btn" onclick="startGame('timed')">⏱️ Timed</button>
+<button class="btn" onclick="startGame('zen')">🧘 Zen</button>
+<button class="btn" onclick="startGame('challenge')">🏆 Challenge</button>
+</div>
+</div>
+<div id="hud">
+<div>Score: <span class="score" id="scoreDisplay">0</span></div>
+<div class="combo" id="comboDisplay"></div>
+<div id="levelDisplay">Lv 1</div>
+</div>
+<div id="timer"></div>
+<canvas id="gameCanvas"></canvas>
+<div id="gameOver">
+<h2>Game Over</h2>
+<div class="stat" id="finalScore"></div>
+<div class="stat" id="finalLines"></div>
+<div class="stat" id="bestCombo"></div>
+<button class="btn" onclick="location.reload()" style="margin-top:20px">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const COLS=10,ROWS=15;
+let CELL,SIDE_W,board=[],score=0,lines=0,combo=0,bestCombo=0,level=1,gameMode='classic';
+let currentPiece=null,nextPiece=null,gameOver=false,gameRunning=false;
+let dropTimer=0,dropInterval=1,timerLeft=0,animating=false;
+let particles=[],shakeTimer=0,comboPopups=[];
+
+const COLORS=['',' #e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22'];
+const SHAPES=[
+null,[[1,1,1,1]],[[1,0],[1,0],[1,1]],[[0,1],[0,1],[1,1]],[[1,1],[1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]],[[0,1,0],[1,1,1]]
+];
+
+function resize(){
+const maxH=window.innerHeight-60;
+SIDE_W=Math.min(120,window.innerWidth*.2);
+CELL=Math.floor(Math.min((window.innerWidth-SIDE_W-20)/COLS,maxH/ROWS));
+canvas.width=CELL*COLS+SIDE_W+20;
+canvas.height=CELL*ROWS;
+canvas.style.marginTop='50px';
+}
+window.addEventListener('resize',resize);resize();
+
+function createBoard(){board=Array.from({length:ROWS},()=>Array(COLS).fill(0))}
+function randomPiece(){
+const type=Math.floor(Math.random()*7)+1;
+const shape=SHAPES[type].map(r=>[...r]);
+return{shape,type,x:Math.floor((COLS-shape[0].length)/2),y:0};
+}
+function rotate(piece){
+const s=piece.shape;
+const r=s[0].map((_,i)=>s.map(row=>row[i]).reverse());
+return{shape:r,type:piece.type,x:piece.x,y:piece.y};
+}
+function valid(piece,offX=0,offY=0){
+for(let r=0;r<piece.shape.length;r++){
+for(let c=0;c<piece.shape[r].length;c++){
+if(!piece.shape[r][c])continue;
+const nx=piece.x+c+offX,ny=piece.y+r+offY;
+if(nx<0||nx>=COLS||ny>=ROWS)return false;
+if(ny>=0&&board[ny][nx])return false;
+}
+}
+return true;
+}
+function lock(piece){
+for(let r=0;r<piece.shape.length;r++){
+for(let c=0;c<piece.shape[r].length;c++){
+if(!piece.shape[r][c])continue;
+const ny=piece.y+r;
+if(ny<0){endGame();return}
+board[ny][piece.x+c]=piece.type;
+}
+}
+clearLines();
+currentPiece=nextPiece;nextPiece=randomPiece();
+if(!valid(currentPiece))endGame();
+}
+function clearLines(){
+let cleared=[];
+for(let r=ROWS-1;r>=0;r--){
+if(board[r].every(c=>c>0))cleared.push(r);
+}
+if(cleared.length===0){combo=0;return}
+cleared.forEach(r=>{board.splice(r,1);board.unshift(Array(COLS).fill(0))});
+combo++;if(combo>bestCombo)bestCombo=combo;
+const pts=[0,100,300,500,800][Math.min(cleared.length,4)]*level;
+score+=pts*combo;lines+=cleared.length;
+level=Math.floor(lines/10)+1;
+dropInterval=Math.max(.1,1-level*.08);
+// Particles
+cleared.forEach(r=>{
+for(let c=0;c<COLS;c++){
+for(let i=0;i<5;i++){
+particles.push({x:c*CELL+CELL/2,y:r*CELL+CELL/2,
+vx:(Math.random()-.5)*8,vy:(Math.random()-.5)*8,
+life:1,color:COLORS[Math.floor(Math.random()*7)+1],r:Math.random()*4+2});
+}
+}
+});
+shakeTimer=.3;
+comboPopups.push({text:combo>1?`🔥 ${combo}x COMBO! +${pts*combo}`:`+${pts}`,y:canvas.height/2,life:1.5});
+updateHUD();
+}
+
+function drawCell(x,y,color,alpha=1){
+ctx.globalAlpha=alpha;
+ctx.fillStyle=color;
+ctx.fillRect(x*CELL+1,y*CELL+1,CELL-2,CELL-2);
+ctx.fillStyle='rgba(255,255,255,.2)';
+ctx.fillRect(x*CELL+1,y*CELL+1,CELL-2,CELL/4);
+ctx.fillStyle='rgba(0,0,0,.15)';
+ctx.fillRect(x*CELL+1,y*CELL+CELL*.7,CELL-2,CELL/4);
+ctx.globalAlpha=1;
+}
+
+function draw(){
+ctx.save();
+if(shakeTimer>0){
+ctx.translate(Math.random()*6-3,Math.random()*6-3);
+shakeTimer-=.016;
+}
+ctx.fillStyle='#0d1117';ctx.fillRect(0,0,canvas.width,canvas.height);
+// Grid
+ctx.strokeStyle='#1a2332';ctx.lineWidth=.5;
+for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(COLS*CELL,r*CELL);ctx.stroke()}
+for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);c*CELL,ROWS*CELL;ctx.lineTo(c*CELL,ROWS*CELL);ctx.stroke()}
+// Board
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+if(board[r][c])drawCell(c,r,COLORS[board[r][c]]);
+}
+// Ghost
+if(currentPiece){
+const ghost={...currentPiece};
+while(valid(ghost,0,1))ghost.y++;
+for(let r=0;r<ghost.shape.length;r++)for(let c=0;c<ghost.shape[r].length;c++){
+if(ghost.shape[r][c]&&ghost.y+r>=0)drawCell(ghost.x+c,ghost.y+r,COLORS[ghost.type],.2);
+}
+// Current
+for(let r=0;r<currentPiece.shape.length;r++)for(let c=0;c<currentPiece.shape[r].length;c++){
+if(currentPiece.shape[r][c]&&currentPiece.y+r>=0)drawCell(currentPiece.x+c,currentPiece.y+r,COLORS[currentPiece.type]);
+}
+}
+// Next piece preview
+if(nextPiece){
+ctx.fillStyle='#111827';ctx.fillRect(COLS*CELL+10,10,SIDE_W,120);
+ctx.strokeStyle='#2a3a4a';ctx.strokeRect(COLS*CELL+10,10,SIDE_W,120);
+ctx.fillStyle='#888';ctx.font='12px sans-serif';ctx.textAlign='center';
+ctx.fillText('NEXT',COLS*CELL+10+SIDE_W/2,28);
+const ox=COLS*CELL+10+(SIDE_W-nextPiece.shape[0].length*18)/2;
+const oy=40;
+for(let r=0;r<nextPiece.shape.length;r++)for(let c=0;c<nextPiece.shape[r].length;c++){
+if(nextPiece.shape[r][c]){
+ctx.fillStyle=COLORS[nextPiece.type];
+ctx.fillRect(ox+c*18+1,oy+r*18+1,16,16);
+}
+}
+}
+// Particles
+particles.forEach(p=>{
+ctx.globalAlpha=p.life;ctx.fillStyle=p.color;
+ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=1;
+});
+// Combo popups
+comboPopups.forEach(p=>{
+ctx.globalAlpha=p.life;
+ctx.fillStyle='#f39c12';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+ctx.fillText(p.text,COLS*CELL/2,p.y);
+ctx.globalAlpha=1;
+});
+ctx.restore();
+}
+
+function updateHUD(){
+document.getElementById('scoreDisplay').textContent=score;
+document.getElementById('comboDisplay').textContent=combo>1?`${combo}x Combo!`:'';
+document.getElementById('levelDisplay').textContent='Lv '+level;
+}
+
+function endGame(){
+gameRunning=true;gameOver=true;
+document.getElementById('gameOver').style.display='flex';
+document.getElementById('finalScore').textContent='Score: '+score;
+document.getElementById('finalLines').textContent='Lines: '+lines;
+document.getElementById('bestCombo').textContent='Best Combo: '+bestCombo+'x';
+// Save
+const best=localStorage.getItem('blockcrunch_best_'+gameMode)||0;
+if(score>best)localStorage.setItem('blockcrunch_best_'+gameMode,score);
+}
+
+let lastTime=0;
+function gameLoop(ts){
+if(!gameRunning||gameOver)return;
+const dt=Math.min((ts-lastTime)/1000,.1);
+lastTime=ts;
+if(gameMode==='timed'){
+timerLeft-=dt;
+document.getElementById('timer').textContent=Math.ceil(timerLeft)+'s';
+if(timerLeft<=0){endGame();return}
+}
+dropTimer+=dt;
+if(dropTimer>=dropInterval){
+dropTimer=0;
+if(valid(currentPiece,0,1))currentPiece.y++;
+else lock(currentPiece);
+}
+// Animate
+particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.2;p.life-=dt*2;return p.life>0});
+comboPopups=comboPopups.filter(p=>{p.y-=40*dt;p.life-=dt;return p.life>0});
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+function startGame(mode){
+gameMode=mode;
+document.getElementById('startScreen').style.display='none';
+document.getElementById('hud').style.display='flex';
+if(mode==='timed'){document.getElementById('timer').style.display='block';timerLeft=60}
+createBoard();
+currentPiece=randomPiece();nextPiece=randomPiece();
+gameRunning=true;
+if(mode==='challenge'){
+// Fill some rows partially for challenge
+for(let r=ROWS-3;r<ROWS;r++){
+for(let c=0;c<Math.floor(Math.random()*6)+2;c++){
+board[r][c]=Math.floor(Math.random()*7)+1;
+}
+}
+}
+requestAnimationFrame(gameLoop);
+}
+
+// Controls
+document.addEventListener('keydown',e=>{
+if(!gameRunning||gameOver||!currentPiece)return;
+if(e.key==='ArrowLeft'&&valid(currentPiece,-1,0))currentPiece.x--;
+if(e.key==='ArrowRight'&&valid(currentPiece,1,0))currentPiece.x++;
+if(e.key==='ArrowDown'&&valid(currentPiece,0,1))currentPiece.y++;
+if(e.key==='ArrowUp'){
+const r=rotate(currentPiece);
+if(valid(r))currentPiece=r;
+}
+if(e.key===' '){while(valid(currentPiece,0,1))currentPiece.y++;lock(currentPiece)}
+});
+
+// Touch controls
+let touchStartX=0,touchStartY=0,touchMoved=false;
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+touchStartX=e.touches[0].clientX;
+touchStartY=e.touches[0].clientY;
+touchMoved=false;
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+e.preventDefault();
+if(!currentPiece||gameOver)return;
+const dx=e.touches[0].clientX-touchStartX;
+const dy=e.touches[0].clientY-touchStartY;
+if(!touchMoved&&Math.abs(dx)>30){
+touchMoved=true;
+if(dx>0&&valid(currentPiece,1,0)){currentPiece.x++;touchStartX=e.touches[0].clientX}
+else if(dx<0&&valid(currentPiece,-1,0)){currentPiece.x--;touchStartX=e.touches[0].clientX}
+}
+if(!touchMoved&&dy>40){
+touchMoved=true;
+if(valid(currentPiece,0,1)){currentPiece.y++;touchStartY=e.touches[0].clientY}
+}
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+if(!touchMoved&&currentPiece&&!gameOver){
+// Tap = rotate
+const r=rotate(currentPiece);
+if(valid(r))currentPiece=r;
+}
+// Swipe down fast = hard drop
+const dy=e.changedTouches[0].clientY-touchStartY;
+if(dy>80&&!touchMoved){while(valid(currentPiece,0,1))currentPiece.y++;lock(currentPiece)}
+});
+</script>
+</body>
+</html>
