@@ -22,6 +22,7 @@ canvas{display:block;margin:0 auto}
 .powerup-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7em;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1)}
 .powerup-icon.active{border-color:#00e676;box-shadow:0 0 8px rgba(0,230,118,0.3)}
 .pause-btn{position:fixed;top:56px;right:12px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#fff;font-size:0.8em;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px)}
+.exit-btn{position:fixed;top:56px;right:52px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#ff5252;font-size:0.9em;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px);font-weight:700}
 
 .zone-name{position:fixed;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.2);font-size:0.65em;pointer-events:none;z-index:10;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
 
@@ -85,6 +86,7 @@ canvas{display:block;margin:0 auto}
   </div>
 </div>
 <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+<button class="exit-btn" id="exitBtn" onclick="exitGame()">✕</button>
 <canvas id="c"></canvas>
 <div class="zone-name" id="zoneName">🏙️ Jalanan Jakarta</div>
 <div class="milestone" id="milestone"></div>
@@ -348,6 +350,14 @@ function togglePause() {
   if (!paused) requestAnimationFrame(loop);
 }
 
+function exitGame() {
+  gameRunning = false; state.gameOver = true;
+  document.getElementById('menuOverlay').style.display = 'flex';
+  document.getElementById('gameOverOverlay').style.display = 'none';
+  document.getElementById('pauseBtn').textContent = '⏸';
+  renderCharSelect();
+}
+
 function loop() {
   if (!gameRunning || paused || state.gameOver) return;
   frameCount++;
@@ -607,6 +617,40 @@ function draw() {
           }
         }
       }
+    }
+  }
+
+  // Gunung Bromo
+  if (z.gimmick === 'quake') {
+    for (let i = 0; i < 5; i++) {
+      const mx = (i * 80 - 20) + Math.sin(frameCount * 0.01 + i) * 5;
+      const mh = 80 + i * 30;
+      const mw = 60 + i * 15;
+      // Mountain shape
+      ctx.fillStyle = `rgba(40,20,5,${0.4 + i * 0.08})`;
+      ctx.beginPath();
+      ctx.moveTo(mx - mw/2, H() - 130);
+      ctx.lineTo(mx, H() - 130 - mh);
+      ctx.lineTo(mx + mw/2, H() - 130);
+      ctx.closePath();
+      ctx.fill();
+      // Snow cap
+      ctx.fillStyle = `rgba(200,190,170,${0.2 + i * 0.04})`;
+      ctx.beginPath();
+      ctx.moveTo(mx - mw/6, H() - 130 - mh + 15);
+      ctx.lineTo(mx, H() - 130 - mh + 2);
+      ctx.lineTo(mx + mw/6, H() - 130 - mh + 15);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Smoke plume
+    for (let i = 0; i < 3; i++) {
+      const sx = 80 + i * 50 + Math.sin(frameCount * 0.03 + i) * 5;
+      const sy = H() - 130 - 140 - i * 15 + Math.sin(frameCount * 0.05 + i * 2) * 3;
+      ctx.fillStyle = `rgba(150,130,110,${0.08 + (3-i) * 0.04})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 12 + i * 8 + Math.sin(frameCount * 0.02) * 3, 0, Math.PI*2);
+      ctx.fill();
     }
   }
 
