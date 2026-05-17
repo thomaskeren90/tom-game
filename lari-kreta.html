@@ -1,76 +1,130 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Lari Kreta</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Lari Kreta — Lari Dari Banjir!</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a1628;overflow:hidden;height:100vh;user-select:none;touch-action:none;perspective:1000px}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes slideUp{from{opacity:0;transform:translateY(30px) scale(0.95)}to{opacity:1;transform:none}}
-@keyframes scaleIn{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
-@keyframes popIn{0%{opacity:0;transform:scale(0)}70%{transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
-@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
-@keyframes scorePop{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-40px) scale(1.5)}}
-@keyframes borderGlow{0%,100%{border-color:rgba(0,188,212,0.3)}50%{border-color:rgba(0,188,212,0.6)}}
-@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(0,188,212,0.2)}50%{box-shadow:0 0 20px rgba(0,188,212,0.5)}}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0a1628;overflow:hidden;height:100dvh;height:100vh;user-select:none;touch-action:none;cursor:default}
 canvas{display:block;margin:0 auto}
-.ui{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;pointer-events:none;z-index:10}
-.score{font-size:1.3em;font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.5)}
-.coins-display{font-size:0.9em;color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,0.3)}
-.zone-name{position:fixed;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.25);font-size:0.7em;pointer-events:none;z-index:10}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:fadeIn 0.3s ease}
-.overlay-card{background:rgba(10,22,40,0.95);border:2px solid rgba(0,188,212,0.3);border-radius:20px;padding:28px;text-align:center;max-width:300px;width:90%;animation:scaleIn 0.35s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 40px rgba(0,188,212,0.1);transform:translateZ(0)}
-.overlay-card h1{font-size:1.5em;margin-bottom:5px}
+
+/* HUD */
+.ui{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:8px 12px;pointer-events:none;z-index:10}
+.score-area{text-align:left}
+.score{font-size:1.6em;font-weight:900;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,0.6);line-height:1}
+.combo-text{font-size:0.65em;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.4);opacity:0;transition:opacity 0.2s}
+.combo-text.active{opacity:1}
+.hud-right{text-align:right}
+.coins-display{font-size:0.85em;color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,0.3);background:rgba(0,0,0,0.3);padding:4px 10px;border-radius:12px;backdrop-filter:blur(4px)}
+.multiplier-badge{display:inline-block;font-size:0.65em;color:#00e676;background:rgba(0,230,118,0.15);padding:2px 8px;border-radius:8px;margin-top:3px}
+.powerup-indicator{display:flex;gap:4px;justify-content:flex-end;margin-top:4px}
+.powerup-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7em;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1)}
+.powerup-icon.active{border-color:#00e676;box-shadow:0 0 8px rgba(0,230,118,0.3)}
+.pause-btn{position:fixed;top:56px;right:12px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#fff;font-size:0.8em;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px)}
+
+.zone-name{position:fixed;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.2);font-size:0.65em;pointer-events:none;z-index:10;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
+
+/* Milestone toast */
+.milestone{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);pointer-events:none;z-index:15;font-size:2em;font-weight:900;color:#ffd700;text-shadow:0 0 30px rgba(255,215,0,0.5);opacity:0;transition:all 0.5s cubic-bezier(0.34,1.56,0.64,1)}
+.milestone.show{transform:translate(-50%,-50%) scale(1);opacity:1}
+
+/* Score pop */
+.score-pop{position:fixed;pointer-events:none;z-index:11;font-weight:700;font-size:0.9em;opacity:0;transition:all 0.4s ease-out}
+
+/* Tutorial overlay */
+.tutorial-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:25;backdrop-filter:blur(8px)}
+.tutorial-card{background:rgba(10,22,40,0.95);border:2px solid rgba(0,188,212,0.3);border-radius:20px;padding:24px;text-align:center;max-width:280px;width:90%}
+.tutorial-card h2{color:#fff;font-size:1.2em;margin-bottom:12px}
+.tutorial-step{display:flex;align-items:center;gap:12px;margin:10px 0;padding:10px;border-radius:12px;background:rgba(255,255,255,0.04)}
+.tutorial-step .icon{font-size:1.5em;width:36px;text-align:center}
+.tutorial-step p{color:#aaa;font-size:0.8em;text-align:left;line-height:1.3}
+.tutorial-btn{background:linear-gradient(135deg,#00b09b,#96c93d);border:none;color:#fff;padding:10px 32px;border-radius:25px;font-size:1em;font-weight:700;cursor:pointer;margin-top:12px;transition:transform 0.2s;pointer-events:auto}
+.tutorial-btn:active{transform:scale(0.95)}
+
+/* Overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(12px);animation:fadeIn 0.3s ease}
+.overlay-card{background:rgba(10,22,40,0.95);border:2px solid rgba(0,188,212,0.3);border-radius:20px;padding:28px;text-align:center;max-width:300px;width:90%;animation:scaleIn 0.35s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 40px rgba(0,188,212,0.1)}
+.overlay-card h1{font-size:1.5em;margin-bottom:5px;color:#fff}
 .overlay-card .emoji{font-size:3em;margin-bottom:8px;animation:popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both}
 .overlay-card p{color:#888;font-size:0.8em;margin:4px 0;line-height:1.4}
+.overlay-card .sub{color:#555;font-size:0.7em}
 .final-score{font-size:2.5em;font-weight:900;color:#00bcd4;margin:8px 0;animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.2s both;text-shadow:0 0 15px rgba(0,188,212,0.3)}
 .stats-row{display:flex;justify-content:center;gap:15px;margin:10px 0}
 .stat{font-size:0.75em;color:#aaa}
 .stat span{color:#00bcd4;font-weight:700}
-.btn{background:linear-gradient(135deg,#00b09b,#96c93d);border:none;color:#fff;padding:12px 28px;border-radius:25px;font-size:1em;font-weight:700;cursor:pointer;margin-top:8px;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),box-shadow 0.3s ease}
+
+.btn{background:linear-gradient(135deg,#00b09b,#96c93d);border:none;color:#fff;padding:12px 28px;border-radius:25px;font-size:1em;font-weight:700;cursor:pointer;margin-top:8px;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),box-shadow 0.3s ease;pointer-events:auto}
 .btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(150,201,61,0.4)}
 .btn:active{transform:scale(0.95)}
+
 .char-select{display:flex;gap:8px;justify-content:center;margin:12px 0;flex-wrap:wrap}
-.char{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4em;cursor:pointer;background:rgba(255,255,255,0.06);border:2px solid transparent;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1)}
-.char:hover:not(.locked){transform:scale(1.1) translateY(-2px);box-shadow:0 4px 12px rgba(0,188,212,0.2)}
+.char{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4em;cursor:pointer;background:rgba(255,255,255,0.06);border:2px solid transparent;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);pointer-events:auto}
 .char:active:not(.locked){transform:scale(0.95)}
-.char.active{border-color:#00bcd4;background:rgba(0,188,212,0.15);animation:popIn 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+.char.active{border-color:#00bcd4;background:rgba(0,188,212,0.15)}
 .char.locked{opacity:0.3;cursor:default}
-.unlock-info{font-size:0.65em;color:#666;margin-top:2px}
+.unlock-info{font-size:0.6em;color:#666;margin-top:2px}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
+@keyframes popIn{0%{opacity:0;transform:scale(0)}70%{transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
+@keyframes shakeAnim{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+@keyframes glowPulse{0%,100%{box-shadow:0 0 5px rgba(0,188,212,0.2)}50%{box-shadow:0 0 20px rgba(0,188,212,0.5)}}
 </style>
 </head>
 <body>
 <div class="ui">
-  <div class="score" id="score">0</div>
-  <div class="coins-display">🪙 <span id="coins">0</span></div>
+  <div class="score-area">
+    <div class="score" id="score">0</div>
+    <div class="combo-text" id="comboText">🔥 Combo x1</div>
+  </div>
+  <div class="hud-right">
+    <div class="coins-display">🪙 <span id="coins">0</span></div>
+    <div class="multiplier-badge" id="multBadge">×1.0</div>
+    <div class="powerup-indicator" id="puIndicator"></div>
+  </div>
 </div>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
 <canvas id="c"></canvas>
 <div class="zone-name" id="zoneName">🏙️ Jalanan Jakarta</div>
+<div class="milestone" id="milestone"></div>
 
+<!-- Tutorial -->
+<div class="tutorial-overlay" id="tutorialOverlay">
+  <div class="tutorial-card">
+    <h2>🎮 Cara Main</h2>
+    <div class="tutorial-step"><div class="icon">👈👉</div><p>Geser kiri/kanan untuk ganti jalur</p></div>
+    <div class="tutorial-step"><div class="icon">👆</div><p>Geser ke atas untuk lompat</p></div>
+    <div class="tutorial-step"><div class="icon">👇</div><p>Geser ke bawah untuk slide (menunduk)</p></div>
+    <div class="tutorial-step"><div class="icon">🪙</div><p>Kumpulin koin buat unlock karakter!</p></div>
+    <div class="tutorial-step"><div class="icon">🛡️⚡🧲</div><p>Ambil power-up: Shield, 2x Koin, Magnet!</p></div>
+    <button class="tutorial-btn" onclick="closeTutorial()">🔥 Mulai Lari!</button>
+  </div>
+</div>
+
+<!-- Menu -->
 <div class="overlay" id="menuOverlay">
   <div class="overlay-card">
     <div class="emoji">🏃</div>
     <h1>Lari Kreta</h1>
-    <p>Lari dari banjir! Kumpulin koin, hindari rintangan.</p>
-    <p style="color:#555;font-size:0.7em">Swipe kiri/kanan atas/bawah • Tap untuk mulai</p>
+    <p>Lari dari banjir Jakarta! 🚣</p>
+    <p class="sub">Geser buat gerak • Kumpulin koin • Hindari rintangan</p>
     <div class="char-select" id="charSelect"></div>
     <button class="btn" onclick="startGame()">🏃 Lari!</button>
   </div>
 </div>
 
+<!-- Game Over -->
 <div class="overlay" id="gameOverOverlay" style="display:none">
   <div class="overlay-card">
-    <div class="emoji">💀</div>
-    <h1>Kena Banjir!</h1>
+    <div class="emoji" id="goEmoji">💀</div>
+    <h1 id="goTitle">Kena Banjir!</h1>
     <div class="final-score" id="finalScore">0</div>
     <div class="stats-row">
-      <div class="stat">🪙 <span id="earnedCoins">0</span> koin</div>
-      <div class="stat">🏃 <span id="distance">0</span>m</div>
-      <div class="stat">🏆 Best: <span id="best">0</span></div>
+      <div class="stat">🪙 <span id="earnedCoins">0</span></div>
+      <div class="stat">🏃 <span id="goDistance">0</span>m</div>
+      <div class="stat">🔥 <span id="maxCombo">1</span>x</div>
+      <div class="stat">🏆 <span id="best">0</span></div>
     </div>
     <p id="newBest" style="color:#ffd700;display:none">🏆 Rekor Baru!</p>
     <button class="btn" onclick="startGame()">Coba Lagi</button>
@@ -78,41 +132,96 @@ canvas{display:block;margin:0 auto}
 </div>
 
 <script>
+// ══════════════════════════════════════════════
+// LARI KRETA — Improved Edition v2
+// ══════════════════════════════════════════════
+
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+const W = () => canvas.width, H = () => canvas.height;
 
-// Constants
+// ————— Constants —————
 const LANE_COUNT = 3;
 const PLAYER_W = 36, PLAYER_H = 50;
+const MAX_SPEED = 12;
+const SPEED_CAP = 10;
+const INVINCIBLE_FRAMES = 90; // ~1.5s at 60fps
+
 const OBSTACLE_TYPES = {
-  train: {w:50,h:80,emoji:'🚃',color:'#555'},
-  barrier: {w:60,h:30,emoji:'🚧',color:'#ff9800'},
-  motorcycle: {w:35,h:40,emoji:'🏍️',color:'#e91e63'},
-  cart: {w:45,h:35,emoji:'🛒',color:'#795548'},
-  puddle: {w:50,h:20,emoji:'💧',color:'#2196f3'},
+  train:   {w:55,h:80,emoji:'🚃',color:'#555',   canJump:true,  canSlide:false},
+  barrier: {w:60,h:30,emoji:'🚧',color:'#ff9800',canJump:true,  canSlide:true},
+  bike:    {w:35,h:40,emoji:'🏍️',color:'#e91e63',canJump:true,  canSlide:false},
+  cart:    {w:50,h:38,emoji:'🛒',color:'#8d6e63',canJump:false, canSlide:true},
+  puddle:  {w:55,h:15,emoji:'💧',color:'#2196f3',canJump:true,  canSlide:true},
 };
 
 const ZONES = [
-  {name:'🏙️ Jalanan Jakarta',sky1:'#0a1628',sky2:'#1a3a5c',ground:'#2a2a2a',obstacleColor:'#555',speed:1},
-  {name:'🌴 Hutan Kalimantan',sky1:'#0a2818',sky2:'#1a5c3a',ground:'#2a3a1a',obstacleColor:'#3a5a2a',speed:1.1},
-  {name:'🏖️ Pantai Bali',sky1:'#0a2838',sky2:'#1a5c7c',ground:'#3a2a1a',obstacleColor:'#5a3a1a',speed:1.2},
-  {name:'🌋 Gunung Bromo',sky1:'#1a0a00',sky2:'#5c2a0a',ground:'#2a1a0a',obstacleColor:'#4a2a0a',speed:1.3},
-  {name:'🚀 Luar Angkasa',sky1:'#0a001a',sky2:'#1a003a',ground:'#0a0020',obstacleColor:'#3a006a',speed:1.5},
+  {name:'🏙️ Jalanan Jakarta',  sky1:'#0a1628',sky2:'#1a3a5c',ground:'#1e1e2e',road:'#2a2a3a',
+   objColor:'#555',bgColor:'#0d1f3a',buildings:true, speed:1.0,  gimmick:null},
+  {name:'🌴 Hutan Kalimantan', sky1:'#0a2518',sky2:'#1a5030',ground:'#1e2e1a',road:'#2a3a22',
+   objColor:'#3a5a2a',bgColor:'#0a1a10',buildings:false,speed:1.1, gimmick:'rain'},
+  {name:'🏖️ Pantai Bali',     sky1:'#0a2838',sky2:'#1a5a7a',ground:'#2a2218',road:'#3a3222',
+   objColor:'#5a3a1a',bgColor:'#0d2030',buildings:false,speed:1.2, gimmick:'lowvis'},
+  {name:'🌋 Gunung Bromo',     sky1:'#1a0a00',sky2:'#4a2a10',ground:'#1a1a0a',road:'#2a2a12',
+   objColor:'#4a2a0a',bgColor:'#150800',buildings:false,speed:1.35,gimmick:'quake'},
+  {name:'🚀 Luar Angkasa',     sky1:'#0a0018',sky2:'#1a0a3a',ground:'#0a0a18',road:'#12122a',
+   objColor:'#3a006a',bgColor:'#080018',buildings:false,speed:1.5, gimmick:'lowgrav'},
 ];
 
 const CHARACTERS = [
-  {emoji:'🏃',name:'Pelari',unlock:0},
-  {emoji:'🧑‍🎓',name:'Mahasiswa',unlock:500},
-  {emoji:'👷',name:'Tukang',unlock:1500},
-  {emoji:'🧑‍🍳',name:'Chef',unlock:3000},
-  {emoji:'🦸',name:'Pahlawan',unlock:5000},
-  {emoji:'👑',name:'Raja',unlock:10000},
+  {emoji:'🏃', name:'Pelari',     unlock:0},
+  {emoji:'🧑‍🎓',name:'Mahasiswa',   unlock:500},
+  {emoji:'👷', name:'Tukang',      unlock:1500},
+  {emoji:'🧑‍🍳',name:'Chef',        unlock:3000},
+  {emoji:'🦸', name:'Pahlawan',    unlock:5000},
+  {emoji:'👑', name:'Raja',        unlock:10000},
 ];
 
-let state, player, obstacles, coins, laneWidth, frameCount, gameRunning, selectedChar;
+const POWERUP_TYPES = [
+  {emoji:'🛡️',name:'Shield',  color:'#00e5ff',duration:300, desc:'Blok 1 tabrakan'},
+  {emoji:'⚡', name:'2x Koin',color:'#ffea00',duration:480, desc:'Koin x2'},
+  {emoji:'🧲', name:'Magnet',  color:'#e040fb',duration:360, desc:'Tarik koin'},
+];
+
+// ————— State —————
+let state, player, obstacles, coins, powerups, particles;
+let laneWidth, frameCount, gameRunning, paused, selectedChar;
 let totalCoins = parseInt(localStorage.getItem('lari-coins')) || 0;
 let bestScore = parseInt(localStorage.getItem('lari-best')) || 0;
+let hasSeenTutorial = localStorage.getItem('lari-tutorial') === '1';
+let shakeAmount = 0, shakeDecay = 0;
+let milestoneText = '', milestoneTimer = 0;
+let soundCtx = null;
 
+// ————— Sound (Web Audio) —————
+function initAudio() {
+  try { soundCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+}
+function playTone(freq, duration, type='square', vol=0.08) {
+  if (!soundCtx) return;
+  try {
+    const osc = soundCtx.createOscillator();
+    const gain = soundCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, soundCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, soundCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(soundCtx.destination);
+    osc.start();
+    osc.stop(soundCtx.currentTime + duration);
+  } catch(e) {}
+}
+function sndJump()   { playTone(520, 0.1, 'sine', 0.06); setTimeout(()=>playTone(680,0.08,'sine',0.04),40); }
+function sndCoin()   { playTone(880, 0.06, 'sine', 0.05); setTimeout(()=>playTone(1100,0.06,'sine',0.04),50); }
+function sndCombo()  { playTone(660, 0.08, 'sine', 0.06); setTimeout(()=>playTone(880,0.08,'sine',0.05),60); setTimeout(()=>playTone(1100,0.1,'sine',0.04),120); }
+function sndHit()    { playTone(200, 0.15, 'sawtooth', 0.1); setTimeout(()=>playTone(150,0.1,'sawtooth',0.08),80); }
+function sndSlide()  { playTone(300, 0.12, 'triangle', 0.04); }
+function sndPowerup(){ playTone(600,0.06,'sine',0.05); setTimeout(()=>playTone(800,0.06,'sine',0.04),60); setTimeout(()=>playTone(1000,0.08,'sine',0.03),120); }
+function sndZone()   { playTone(400,0.1,'sine',0.05); setTimeout(()=>playTone(500,0.1,'sine',0.04),100); setTimeout(()=>playTone(650,0.15,'sine',0.03),200); }
+function sndMilestone(){playTone(700,0.08,'sine',0.05);setTimeout(()=>playTone(900,0.1,'sine',0.04),80);setTimeout(()=>playTone(1200,0.12,'sine',0.03),160);}
+
+// ————— Resize —————
 function resize() {
   canvas.width = Math.min(window.innerWidth, 420);
   canvas.height = window.innerHeight;
@@ -121,235 +230,534 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
+// ————— Init —————
 function init() {
   player = {
-    lane: 1,
-    x: 0, y: 0,
-    targetX: 0,
-    vy: 0, jumping: false, sliding: false,
-    slideTimer: 0
+    lane: 1, x: 0, y: 0, targetX: 0,
+    vy: 0, jumping: false, sliding: false, slideTimer: 0,
+    powerups: {shield:0, coin2x:0, magnet:0},
+    combo: 0, maxCombo: 1, comboCooldown: 0,
+    lastMilestone: 0
   };
-  obstacles = [];
-  coins = [];
+  obstacles = []; coins = []; powerups = []; particles = [];
   state = {
     score: 0, distance: 0, coinsEarned: 0,
     speed: 3, zoneIndex: 0, zoneProgress: 0,
-    invincible: 0
+    invincible: 0, gameOver: false, deathSlowMo: 0
   };
-  frameCount = 0;
+  frameCount = 0; paused = false; shakeAmount = 0;
   updateLanePos();
-  document.getElementById('score').textContent = '0';
-  document.getElementById('coins').textContent = totalCoins;
+  updateHUD();
+  document.getElementById('pauseBtn').textContent = '⏸';
+  document.getElementById('zoneName').textContent = ZONES[0].name;
 }
 
 function updateLanePos() {
   player.targetX = player.lane * laneWidth + laneWidth/2 - PLAYER_W/2;
-  player.y = canvas.height - 130 - PLAYER_H;
+  player.y = H() - 130 - PLAYER_H;
 }
 
+// ————— HUD —————
+function updateHUD() {
+  document.getElementById('score').textContent = Math.floor(state.score);
+  document.getElementById('coins').textContent = totalCoins + state.coinsEarned;
+  const combo = document.getElementById('comboText');
+  if (player.combo > 1) {
+    combo.textContent = `🔥 ${player.combo}x Combo`;
+    combo.classList.add('active');
+  } else combo.classList.remove('active');
+  const mult = player.powerups.coin2x > 0 ? '×2.0' : '×1.0';
+  document.getElementById('multBadge').textContent = mult;
+  // Powerup indicators
+  const puEl = document.getElementById('puIndicator');
+  const active = POWERUP_TYPES.filter((_,i) => player.powerups[['shield','coin2x','magnet'][i]] > 0);
+  puEl.innerHTML = active.map(p => 
+    `<div class="powerup-icon active" style="border-color:${p.color}">${p.emoji}</div>`
+  ).join('');
+}
+
+// ————— Particles —————
+function spawnParticles(x, y, count, color, spread=60) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    particles.push({
+      x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2,
+      life: 30 + Math.random() * 20, maxLife: 50,
+      color, size: 2 + Math.random() * 3
+    });
+  }
+}
+
+function spawnCoinParticles(x, y) {
+  spawnParticles(x, y, 8, '#ffd700');
+}
+
+function spawnHitParticles(x, y) {
+  spawnParticles(x, y, 20, '#ff1744');
+}
+
+// ————— Milestones —————
+function checkMilestones() {
+  const dist = Math.floor(state.distance);
+  const milestones = [100,250,500,750,1000,1500,2000,3000,5000];
+  for (const m of milestones) {
+    if (dist >= m && player.lastMilestone < m) {
+      player.lastMilestone = m;
+      showMilestone(`🌟 ${m}m!`);
+      sndMilestone();
+    }
+  }
+}
+
+function showMilestone(text) {
+  const el = document.getElementById('milestone');
+  el.textContent = text;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+// ————— Game loop —————
 function startGame() {
+  closeTutorial();
   document.getElementById('menuOverlay').style.display = 'none';
   document.getElementById('gameOverOverlay').style.display = 'none';
   init();
-  gameRunning = true;
-  requestAnimationFrame(loop);
+  if (!hasSeenTutorial && !document.getElementById('tutorialOverlay').style.display) {
+    document.getElementById('tutorialOverlay').style.display = 'flex';
+  } else {
+    gameRunning = true;
+    requestAnimationFrame(loop);
+  }
 }
 
-function renderCharSelect() {
-  const el = document.getElementById('charSelect');
-  el.innerHTML = CHARACTERS.map((c,i) => {
-    const locked = totalCoins < c.unlock;
-    return `<div>
-      <div class="char ${i===selectedChar?'active':''} ${locked?'locked':''}" 
-           onclick="${locked?'':`selectChar(${i})`}">${c.emoji}</div>
-      <div class="unlock-info">${c.unlock>0?c.unlock:'✓'}</div>
-    </div>`;
-  }).join('');
+function closeTutorial() {
+  document.getElementById('tutorialOverlay').style.display = 'none';
+  localStorage.setItem('lari-tutorial', '1');
+  hasSeenTutorial = true;
+  if (!gameRunning && !state?.gameOver) {
+    gameRunning = true;
+    requestAnimationFrame(loop);
+  }
 }
 
-function selectChar(i) {
-  selectedChar = i;
-  renderCharSelect();
+function togglePause() {
+  if (!gameRunning || state.gameOver) return;
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? '▶' : '⏸';
+  if (!paused) requestAnimationFrame(loop);
 }
-
-selectedChar = 0;
-renderCharSelect();
 
 function loop() {
-  if (!gameRunning) return;
+  if (!gameRunning || paused || state.gameOver) return;
   frameCount++;
 
-  const speedMult = ZONES[state.zoneIndex].speed;
-
-  // Player smooth movement
-  player.x += (player.targetX - player.x) * 0.2;
-
-  // Jump physics
-  if (player.jumping) {
-    player.vy += 0.5;
-    player.y += player.vy;
-    if (player.y >= canvas.height - 130 - PLAYER_H) {
-      player.y = canvas.height - 130 - PLAYER_H;
-      player.jumping = false;
-      player.vy = 0;
+  // ————— Death slow-mo —————
+  if (state.deathSlowMo > 0) {
+    state.deathSlowMo--;
+    draw();
+    if (state.deathSlowMo > 0) {
+      setTimeout(() => requestAnimationFrame(loop), 30);
+    } else {
+      showGameOver();
     }
+    return;
   }
 
-  // Slide timer
+  const zone = ZONES[state.zoneIndex];
+  const speedMult = zone.speed;
+  let currentSpeed = Math.min(state.speed, SPEED_CAP);
+
+  // ————— Zone gimmicks —————
+  let gravity = 0.5;
+  let laneSpeed = 1;
+  if (zone.gimmick === 'lowgrav') { gravity = 0.25; }
+  if (zone.gimmick === 'quake') { shakeAmount = Math.max(shakeAmount, 0.5); }
+
+  // ————— Player —————
+  player.x += (player.targetX - player.x) * (0.2 * laneSpeed);
+  if (player.jumping) {
+    player.vy += gravity;
+    player.y += player.vy;
+    if (player.y >= H() - 130 - PLAYER_H) {
+      player.y = H() - 130 - PLAYER_H;
+      player.jumping = false; player.vy = 0;
+    }
+  }
   if (player.sliding) {
     player.slideTimer--;
     if (player.slideTimer <= 0) player.sliding = false;
   }
 
-  // Spawn obstacles
-  if (frameCount % Math.max(30, 70 - state.speed * 5) === 0) {
+  // Powerup timers
+  for (const k of ['shield','coin2x','magnet']) {
+    if (player.powerups[k] > 0) player.powerups[k]--;
+  }
+
+  // ————— Spawn obstacles —————
+  const spawnRate = Math.max(25, 65 - currentSpeed * 4);
+  if (frameCount % spawnRate === 0) {
     const types = Object.keys(OBSTACLE_TYPES);
     const type = types[Math.floor(Math.random() * types.length)];
     const lane = Math.floor(Math.random() * LANE_COUNT);
+    const ot = OBSTACLE_TYPES[type];
     obstacles.push({
-      x: lane * laneWidth + laneWidth/2 - OBSTACLE_TYPES[type].w/2,
-      y: -OBSTACLE_TYPES[type].h,
-      type, lane,
-      ...OBSTACLE_TYPES[type]
+      x: lane * laneWidth + laneWidth/2 - ot.w/2,
+      y: -ot.h, lane, type, ...ot
     });
   }
 
-  // Spawn coins
-  if (frameCount % 45 === 0) {
+  // ————— Spawn coins —————
+  if (frameCount % 40 === 0) {
     const lane = Math.floor(Math.random() * LANE_COUNT);
-    coins.push({
-      x: lane * laneWidth + laneWidth/2 - 10,
-      y: -20, collected: false
+    coins.push({ x: lane * laneWidth + laneWidth/2 - 10, y: -20, collected: false });
+  }
+
+  // ————— Spawn powerups —————
+  if (frameCount % 600 === 0) {
+    const pi = Math.floor(Math.random() * POWERUP_TYPES.length);
+    const lane = Math.floor(Math.random() * LANE_COUNT);
+    powerups.push({
+      x: lane * laneWidth + laneWidth/2 - 12, y: -20,
+      type: pi, ...POWERUP_TYPES[pi], collected: false
     });
   }
 
-  // Move obstacles
-  obstacles.forEach(o => o.y += state.speed * speedMult);
-  coins.forEach(c => c.y += state.speed * speedMult);
+  // ————— Move stuff —————
+  obstacles.forEach(o => o.y += currentSpeed * speedMult);
+  coins.forEach(c => { if (!c.collected) c.y += currentSpeed * speedMult; });
+  powerups.forEach(p => { if (!p.collected) p.y += currentSpeed * speedMult; });
 
-  // Remove off-screen
-  obstacles = obstacles.filter(o => o.y < canvas.height);
-  coins = coins.filter(c => c.y < canvas.height && !c.collected);
+  // ————— Magnet effect —————
+  if (player.powerups.magnet > 0) {
+    coins.forEach(c => {
+      if (c.collected) return;
+      const dx = (player.x + PLAYER_W/2) - (c.x + 10);
+      const dy = (player.y + PLAYER_H/2) - (c.y + 10);
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 150 && dist > 5) {
+        c.x += dx * 0.08;
+        c.y += dy * 0.08;
+      }
+    });
+  }
 
-  // Collision check
+  // ————— Remove off-screen —————
+  obstacles = obstacles.filter(o => o.y < H() + 50);
+  coins = coins.filter(c => c.y < H() + 50 && !c.collected);
+  powerups = powerups.filter(p => p.y < H() + 50 && !p.collected);
+
+  // ————— Collision —————
+  if (state.invincible > 0) state.invincible--;
   const px = player.x, py = player.y;
-  const playerH = player.sliding ? PLAYER_H * 0.4 : PLAYER_H;
-  const playerY = player.sliding ? player.y + PLAYER_H * 0.6 : player.y;
+  const pLayerH = player.sliding ? PLAYER_H * 0.4 : PLAYER_H;
+  const pLayerY = player.sliding ? player.y + PLAYER_H * 0.6 : player.y;
 
   for (const o of obstacles) {
     if (state.invincible > 0) continue;
-    if (px + PLAYER_W > o.x + 5 && px < o.x + o.w - 5 &&
-        playerY + playerH > o.y + 5 && playerY < o.y + o.h - 5) {
-      gameOver();
-      return;
+    if (px + PLAYER_W > o.x + 4 && px < o.x + o.w - 4 &&
+        pLayerY + pLayerH > o.y + 4 && pLayerY < o.y + o.h - 4) {
+      // Check if player can dodge via jump/slide
+      const canDodge = (player.jumping && o.canJump) || (player.sliding && o.canSlide);
+      if (!canDodge) {
+        // Shield check
+        if (player.powerups.shield > 0) {
+          player.powerups.shield = 0;
+          state.invincible = 60;
+          spawnParticles(px + PLAYER_W/2, py + PLAYER_H/2, 15, '#00e5ff', 80);
+          obstacles = obstacles.filter(ob => ob !== o);
+          sndPowerup();
+          continue;
+        }
+        sndHit();
+        spawnHitParticles(px + PLAYER_W/2, py + PLAYER_H/2);
+        shakeAmount = 8;
+        if (navigator.vibrate) navigator.vibrate(100);
+        state.deathSlowMo = 20;
+        state.gameOver = true;
+        gameRunning = false;
+        return;
+      }
     }
   }
 
-  // Collect coins
+  // ————— Collect coins —————
   coins.forEach(c => {
     if (c.collected) return;
     if (px + PLAYER_W > c.x && px < c.x + 20 &&
-        playerY + playerH > c.y && playerY < c.y + 20) {
+        pLayerY + pLayerH > c.y && pLayerY < c.y + 20) {
       c.collected = true;
-      state.coinsEarned++;
+      const mult = player.powerups.coin2x > 0 ? 2 : 1;
+      state.coinsEarned += mult;
+      totalCoins += mult - 1; // add bonus immediately
+      player.combo++;
+      player.comboCooldown = 60;
+      if (player.combo > player.maxCombo) player.maxCombo = player.combo;
+      if (player.combo > 1 && player.combo % 5 === 0) sndCombo(); else sndCoin();
+      spawnCoinParticles(c.x + 10, c.y + 10);
+      // Score pop
+      showScorePop(c.x + 10, c.y, mult > 1 ? '+2🪙' : '+1🪙', mult > 1 ? '#ffea00' : '#ffd700');
     }
   });
 
-  // Score & zone
-  state.score += Math.floor(state.speed);
-  state.distance += state.speed * 0.1;
-  state.speed += 0.002;
-  state.zoneProgress += state.speed * 0.1;
-  if (state.invincible > 0) state.invincible--;
+  // ————— Collect powerups —————
+  powerups.forEach(p => {
+    if (p.collected) return;
+    if (px + PLAYER_W > p.x && px < p.x + 24 &&
+        pLayerY + pLayerH > p.y && pLayerY < p.y + 24) {
+      p.collected = true;
+      const keys = ['shield','coin2x','magnet'];
+      const key = keys[p.type];
+      if (key) {
+        player.powerups[key] = POWERUP_TYPES[p.type].duration;
+        spawnParticles(p.x + 12, p.y + 12, 12, p.color, 50);
+        sndPowerup();
+        showScorePop(p.x + 12, p.y, p.emoji + ' ' + p.name, p.color);
+      }
+    }
+  });
 
-  // Zone transition
+  // ————— Combo decay —————
+  if (player.comboCooldown > 0) player.comboCooldown--;
+  if (player.comboCooldown === 0 && player.combo > 0) {
+    player.combo = 0;
+  }
+
+  // ————— Score & speed —————
+  state.score += Math.floor(currentSpeed * (player.powerups.coin2x > 0 ? 2 : 1));
+  state.distance += currentSpeed * 0.1;
+  state.speed += 0.0015;
+  state.zoneProgress += currentSpeed * 0.08;
+
+  // ————— Zone transition —————
   if (state.zoneProgress > 500 && state.zoneIndex < ZONES.length - 1) {
     state.zoneIndex++;
     state.zoneProgress = 0;
     document.getElementById('zoneName').textContent = ZONES[state.zoneIndex].name;
+    sndZone();
+    spawnParticles(W()/2, H()/2, 30, '#00bcd4', 200);
+    showMilestone(`🌍 ${ZONES[state.zoneIndex].name.split(' ').slice(1).join(' ')}!`);
   }
 
-  document.getElementById('score').textContent = state.score;
-  document.getElementById('coins').textContent = totalCoins + state.coinsEarned;
+  // ————— Milestones —————
+  checkMilestones();
 
+  // ————— Particles —————
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.05;
+    p.life--;
+    return p.life > 0;
+  });
+
+  // ————— Shake decay —————
+  shakeAmount *= 0.85;
+  if (shakeAmount < 0.1) shakeAmount = 0;
+
+  // ————— Draw —————
   draw();
+  updateHUD();
+
   requestAnimationFrame(loop);
 }
 
+// ————— Draw —————
 function draw() {
-  const zone = ZONES[state.zoneIndex];
+  const z = ZONES[state.zoneIndex];
+  const shX = (Math.random() - 0.5) * shakeAmount;
+  const shY = (Math.random() - 0.5) * shakeAmount;
 
-  // Sky
-  const grad = ctx.createLinearGradient(0,0,0,canvas.height);
-  grad.addColorStop(0, zone.sky1);
-  grad.addColorStop(1, zone.sky2);
+  ctx.save();
+  ctx.translate(shX, shY);
+
+  // Sky gradient
+  const grad = ctx.createLinearGradient(0,0,0,H());
+  grad.addColorStop(0, z.sky1);
+  grad.addColorStop(1, z.sky2);
   ctx.fillStyle = grad;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillRect(0,0,W(),H());
 
-  // Ground
-  ctx.fillStyle = zone.ground;
-  ctx.fillRect(0, canvas.height-130, canvas.width, 130);
+  // Stars (space zone)
+  if (z.gimmick === 'lowgrav') {
+    for (let i = 0; i < 30; i++) {
+      const sx = (i * 137.5 + (frameCount * 0.02 * i)) % W();
+      const sy = (i * 97.3 + frameCount * 0.01 * (i % 5)) % (H() - 140);
+      const size = 1 + (i % 3);
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + (i % 10) * 0.07})`;
+      ctx.fillRect(sx, sy, size, size);
+    }
+  }
 
-  // Lane lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  // Background buildings
+  if (z.buildings) {
+    ctx.fillStyle = z.bgColor;
+    const bCount = Math.ceil(W() / 40) + 2;
+    for (let i = 0; i < bCount; i++) {
+      const bx = i * 40 - ((frameCount * 0.3) % 40);
+      const bh = 40 + (i * 37 % 60);
+      const bw = 30 + (i * 13 % 15);
+      ctx.fillStyle = `rgba(15,30,55,${0.3 + (i % 3) * 0.15})`;
+      ctx.fillRect(bx, H() - 130 - bh, bw, bh);
+      // Windows
+      ctx.fillStyle = `rgba(255,200,100,${0.1 + (i % 5) * 0.04})`;
+      for (let wy = 0; wy < bh - 10; wy += 12) {
+        for (let wx = 4; wx < bw - 4; wx += 10) {
+          if ((i + wy + wx) % 3 > 0) {
+            ctx.fillRect(bx + wx, H() - 130 - bh + 6 + wy, 5, 6);
+          }
+        }
+      }
+    }
+  }
+
+  // Trees (jungle zone)
+  if (z.gimmick === 'rain') {
+    for (let i = 0; i < 8; i++) {
+      const tx = (i * 55 + frameCount * 0.2 * (1 - (i % 3) * 0.3)) % (W() + 30) - 15;
+      const th = 40 + (i * 17 % 30);
+      ctx.fillStyle = '#1a4a2a';
+      ctx.beginPath(); ctx.arc(tx + 15, H() - 130 - th, 20, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#0a2a1a';
+      ctx.fillRect(tx + 12, H() - 130 - 5, 6, th - 15);
+    }
+    // Rain
+    ctx.strokeStyle = 'rgba(150,200,255,0.15)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 30; i++) {
+      const rx = (i * 47.1 + frameCount * 3) % W();
+      const ry = (i * 31.7 + frameCount * 5) % (H() - 130);
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx - 2, ry + 12);
+      ctx.stroke();
+    }
+  }
+
+  // Road
+  ctx.fillStyle = z.road;
+  ctx.fillRect(0, H() - 130, W(), 130);
+
+  // Ground line
+  ctx.fillStyle = z.ground;
+  ctx.fillRect(0, H() - 130, W(), 4);
+
+  // Lane markers
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 1;
   for (let i = 1; i < LANE_COUNT; i++) {
     ctx.beginPath();
     ctx.moveTo(i * laneWidth, 0);
-    ctx.lineTo(i * laneWidth, canvas.height);
+    ctx.lineTo(i * laneWidth, H());
     ctx.stroke();
   }
 
-  // Road markings (animated)
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  for (let y = (frameCount * 2) % 40 - 40; y < canvas.height; y += 40) {
-    ctx.fillRect(canvas.width/2 - 2, y, 4, 20);
+  // Road dashes
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  for (let y = (frameCount * (2 + currentSpeed())) % 40 - 40; y < H(); y += 40) {
+    ctx.fillRect(W()/2 - 2, y, 4, 20);
   }
+
+  // Powerups
+  powerups.forEach(p => {
+    if (p.collected) return;
+    const pulse = 10 + Math.sin(frameCount * 0.08) * 3;
+    ctx.fillStyle = p.color + '44';
+    ctx.beginPath();
+    ctx.arc(p.x + 12, p.y + 12, pulse, 0, Math.PI*2);
+    ctx.fill();
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.emoji, p.x + 12, p.y + 16);
+  });
 
   // Coins
   coins.forEach(c => {
     if (c.collected) return;
+    const bob = Math.sin(frameCount * 0.05 + c.x) * 2;
+    ctx.save();
+    ctx.translate(c.x + 10, c.y + 10 + bob);
+    // Glow
+    ctx.fillStyle = 'rgba(255,215,0,0.15)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 14, 0, Math.PI*2);
+    ctx.fill();
+    // Coin
+    const sc = 0.8 + Math.sin(frameCount * 0.1 + c.x) * 0.2;
+    ctx.scale(sc, 1);
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
-    ctx.arc(c.x + 10, c.y + 10, 10, 0, Math.PI*2);
+    ctx.arc(0, 1, 9, 0, Math.PI*2);
     ctx.fill();
     ctx.fillStyle = '#ffab00';
-    ctx.font = '12px sans-serif';
+    ctx.beginPath();
+    ctx.arc(0, 1, 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd700';
+    ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🪙', c.x + 10, c.y + 14);
+    ctx.fillText('$', 0, 5);
+    ctx.restore();
   });
 
   // Obstacles
   obstacles.forEach(o => {
     ctx.fillStyle = o.color;
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.85;
     ctx.fillRect(o.x, o.y, o.w, o.h);
     ctx.globalAlpha = 1;
-    ctx.font = `${Math.min(o.w,o.h) * 0.7}px sans-serif`;
+    // Border
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(o.x, o.y, o.w, o.h);
+    // Emoji
+    ctx.font = `${Math.min(o.w, o.h) * 0.65}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(o.emoji, o.x + o.w/2, o.y + o.h * 0.7);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(o.emoji, o.x + o.w/2, o.y + o.h/2);
   });
 
+  // Particles
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+  });
+  ctx.globalAlpha = 1;
+
   // Player
+  const charEmoji = CHARACTERS[selectedChar || 0].emoji;
   ctx.save();
   ctx.translate(player.x + PLAYER_W/2, player.y + PLAYER_H/2);
 
   // Invincibility flash
-  if (state.invincible > 0 && frameCount % 4 < 2) {
+  if (state.invincible > 0 && frameCount % 3 < 2) {
     ctx.globalAlpha = 0.5;
+  }
+
+  // Shield visual
+  if (player.powerups.shield > 0) {
+    ctx.strokeStyle = `rgba(0,229,255,${0.3 + Math.sin(frameCount * 0.1) * 0.15})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(0, PLAYER_H/2 + 5, PLAYER_W/2, 6, 0, 0, Math.PI*2);
+  ctx.ellipse(0, PLAYER_H/2 + 6, PLAYER_W/2.5, 5, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Character
-  const charEmoji = CHARACTERS[selectedChar || 0].emoji;
+  // Character body
   if (player.sliding) {
-    ctx.rotate(Math.PI/6);
-    ctx.scale(1, 0.6);
+    ctx.rotate(Math.PI / 8);
+    ctx.scale(1, 0.5);
+  }
+  // Bob while running
+  if (!player.jumping && !player.sliding) {
+    ctx.translate(0, Math.sin(frameCount * 0.2) * 2);
   }
   ctx.font = `${PLAYER_H * 0.8}px sans-serif`;
   ctx.textAlign = 'center';
@@ -358,10 +766,44 @@ function draw() {
 
   ctx.restore();
   ctx.globalAlpha = 1;
+  ctx.restore(); // end shake
 }
 
+function currentSpeed() { return Math.min(state.speed, SPEED_CAP); }
+
+// ————— Score pop —————
+function showScorePop(x, y, text, color='#fff') {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.textContent = text;
+  el.style.color = color;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.textShadow = `0 0 10px ${color}44`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(-30px)';
+  });
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-50px)';
+    setTimeout(() => el.remove(), 500);
+  }, 400);
+}
+
+// ————— Game Over —————
 function gameOver() {
+  sndHit();
+  spawnHitParticles(player.x + PLAYER_W/2, player.y + PLAYER_H/2);
+  shakeAmount = 10;
+  if (navigator.vibrate) navigator.vibrate(150);
+  state.deathSlowMo = 20;
+  state.gameOver = true;
   gameRunning = false;
+}
+
+function showGameOver() {
   totalCoins += state.coinsEarned;
   localStorage.setItem('lari-coins', totalCoins);
 
@@ -371,60 +813,91 @@ function gameOver() {
     localStorage.setItem('lari-best', bestScore);
   }
 
-  document.getElementById('finalScore').textContent = state.score;
+  const dist = Math.floor(state.distance);
+  const deathMsgs = ['Kena Banjir! 🌊','Tabrakan! 💥','Kebelet! 🏃','Gawat! 🚨','Kepleset! 💀'];
+  const msg = deathMsgs[state.zoneIndex % deathMsgs.length];
+
+  document.getElementById('goEmoji').textContent = '💀';
+  document.getElementById('goTitle').textContent = msg;
+  document.getElementById('finalScore').textContent = Math.floor(state.score);
   document.getElementById('earnedCoins').textContent = state.coinsEarned;
-  document.getElementById('distance').textContent = Math.floor(state.distance);
+  document.getElementById('goDistance').textContent = dist;
+  document.getElementById('maxCombo').textContent = player.maxCombo;
   document.getElementById('best').textContent = bestScore;
   document.getElementById('newBest').style.display = isNewBest ? 'block' : 'none';
-
   renderCharSelect();
 
   setTimeout(() => {
     document.getElementById('gameOverOverlay').style.display = 'flex';
-  }, 300);
+  }, 200);
 }
 
-// Controls
+// ————— Character select —————
+function renderCharSelect() {
+  const el = document.getElementById('charSelect');
+  el.innerHTML = CHARACTERS.map((c,i) => {
+    const locked = totalCoins < c.unlock;
+    return `<div>
+      <div class="char ${i===selectedChar?'active':''} ${locked?'locked':''}"
+           onclick="${locked?'':`selectChar(${i})`}">${c.emoji}</div>
+      <div class="unlock-info">${c.unlock>0 ? (locked ? '🔒'+formatNum(c.unlock) : '✓') : '✓'}</div>
+    </div>`;
+  }).join('');
+}
+
+function formatNum(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : n; }
+
+function selectChar(i) {
+  selectedChar = i;
+  renderCharSelect();
+}
+
+selectedChar = 0;
+renderCharSelect();
+
+// ————— Controls —————
 let touchStartX, touchStartY;
 document.addEventListener('touchstart', e => {
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
+  initAudio();
 });
 document.addEventListener('touchend', e => {
-  if (!touchStartX) return;
+  if (!touchStartX || paused || state.gameOver) return;
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   const absDx = Math.abs(dx), absDy = Math.abs(dy);
 
-  if (Math.max(absDx, absDy) < 20) return;
+  if (Math.max(absDx, absDy) < 15) return;
 
   if (absDx > absDy) {
-    // Horizontal swipe
-    if (dx > 0 && player.lane < LANE_COUNT - 1) player.lane++;
-    else if (dx < 0 && player.lane > 0) player.lane--;
+    if (dx > 0 && player.lane < LANE_COUNT - 1) { player.lane++; }
+    else if (dx < 0 && player.lane > 0) { player.lane--; }
     updateLanePos();
   } else {
-    // Vertical swipe
     if (dy < 0 && !player.jumping) {
-      // Jump
-      player.jumping = true;
-      player.vy = -12;
+      player.jumping = true; player.vy = -12;
+      sndJump();
     } else if (dy > 0 && !player.sliding) {
-      // Slide
-      player.sliding = true;
-      player.slideTimer = 30;
+      player.sliding = true; player.slideTimer = 25;
+      sndSlide();
     }
   }
   touchStartX = touchStartY = null;
 });
 
 document.addEventListener('keydown', e => {
+  if (state?.gameOver) return;
   if (e.key === 'ArrowLeft' && player.lane > 0) { player.lane--; updateLanePos(); }
   if (e.key === 'ArrowRight' && player.lane < LANE_COUNT-1) { player.lane++; updateLanePos(); }
-  if (e.key === 'ArrowUp' && !player.jumping) { player.jumping = true; player.vy = -12; }
-  if (e.key === 'ArrowDown' && !player.sliding) { player.sliding = true; player.slideTimer = 30; }
+  if (e.key === 'ArrowUp' && !player.jumping) { player.jumping = true; player.vy = -12; sndJump(); }
+  if (e.key === 'ArrowDown' && !player.sliding) { player.sliding = true; player.slideTimer = 25; sndSlide(); }
+  if (e.key === ' ' || e.key === 'Enter') { if (!gameRunning) startGame(); }
+  if (e.key === 'p' || e.key === 'P') { togglePause(); }
+  initAudio();
 });
 
+// Init
 init();
 </script>
 </body>
