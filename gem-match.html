@@ -9,7 +9,6 @@
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#1a002a,#0a001a);color:#fff;overflow:hidden;height:100dvh;user-select:none;touch-action:none}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes scaleIn{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
-@keyframes popIn{0%{opacity:0;transform:scale(0)}70%{transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
 
 .top-bar{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.4);backdrop-filter:blur(10px)}
 .score{font-size:1.3em;font-weight:800;color:#e040fb;text-shadow:0 0 10px rgba(224,64,251,0.3)}
@@ -19,45 +18,40 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear
 .progress-wrap{background:rgba(255,255,255,0.08);height:4px;margin:0 12px 4px;border-radius:2px;overflow:hidden}
 .progress-bar{height:100%;background:linear-gradient(90deg,#e040fb,#7c4dff);border-radius:2px;transition:width 0.5s ease;width:0%}
 
-.board-wrap{display:flex;align-items:center;justify-content:center;height:calc(100dvh - 150px);perspective:600px}
-.board{display:grid;gap:5px;padding:8px;background:rgba(0,0,0,0.4);border-radius:14px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 0 30px rgba(224,64,251,0.08)}
-.cell{border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:2.2em;cursor:pointer;position:relative;aspect-ratio:1;min-width:32px;min-height:32px;background:rgba(255,255,255,0.05);transition:transform 0.15s ease}
-.cell:active{transform:scale(0.92)}
-.cell.selected{box-shadow:0 0 0 3px #fff,0 0 15px rgba(255,255,255,0.3);transform:scale(1.1);z-index:2;background:rgba(255,255,255,0.12)}
-.cell.preview-match{box-shadow:0 0 0 3px #ffea00,0 0 20px rgba(255,234,0,0.4);animation:previewPulse 0.5s ease infinite}
-@keyframes previewPulse{0%,100%{box-shadow:0 0 0 3px #ffea00,0 0 20px rgba(255,234,0,0.4)}50%{box-shadow:0 0 0 3px #ffea00,0 0 35px rgba(255,234,0,0.6)}}
+.board-wrap{display:flex;align-items:center;justify-content:center;height:calc(100dvh - 150px)}
+.board{display:grid;gap:6px;padding:10px;background:rgba(0,0,0,0.4);border-radius:16px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 0 40px rgba(224,64,251,0.06)}
+.cell{border-radius:50%;width:100%;aspect-ratio:1;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;transition:transform 0.12s ease;min-width:28px;min-height:28px}
+.cell:active{transform:scale(0.88)}
+.cell.empty{cursor:default;background:transparent!important;box-shadow:none!important}
+.cell.selected{box-shadow:0 0 0 3px #fff,0 0 18px rgba(255,255,255,0.4)!important;transform:scale(1.15);z-index:3}
+.cell.preview-match{box-shadow:0 0 0 4px #ffea00,0 0 30px rgba(255,234,0,0.5)!important;animation:previewPulse 0.4s ease infinite;z-index:2}
+@keyframes previewPulse{0%,100%{box-shadow:0 0 0 4px #ffea00,0 0 30px rgba(255,234,0,0.5)!important}50%{box-shadow:0 0 0 4px #ffd700,0 0 50px rgba(255,215,0,0.7)!important}}
 .cell.hint{animation:hintPulse 0.6s ease infinite}
-@keyframes hintPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes hintPulse{0%,100%{box-shadow:0 0 0 2px rgba(255,255,255,0.3)!important}50%{box-shadow:0 0 0 2px rgba(255,255,255,0.6)!important}}
 
-/* Match animation */
+/* 3D Ball styles */
+.gem-ball{width:90%;height:90%;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease}
+.gem-ball::after{content:'';position:absolute;top:12%;left:20%;width:30%;height:25%;background:radial-gradient(ellipse,rgba(255,255,255,0.6),transparent);border-radius:50%}
+.gem-ball::before{content:'';position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 -4px 8px rgba(0,0,0,0.3),inset 0 4px 8px rgba(255,255,255,0.1)}
+
+/* Swap animation - actual movement */
+.cell.swap-anim{transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);z-index:4}
+
+/* Match ring */
 .match-ring{position:absolute;pointer-events:none;border-radius:50%;z-index:5;animation:ringExpand 0.5s ease forwards}
-@keyframes ringExpand{0%{width:0;height:0;opacity:1}100%{width:80px;height:80px;opacity:0}}
+@keyframes ringExpand{0%{width:0;height:0;opacity:1;top:50%;left:50%}100%{width:90px;height:90px;opacity:0;top:calc(50% - 45px);left:calc(50% - 45px)}}
 
-.cell.matched{animation:gemPop 0.4s ease forwards}
-@keyframes gemPop{0%{transform:scale(1);opacity:1}30%{transform:scale(1.3);opacity:1}60%{transform:scale(1.5);opacity:0.8}100%{transform:scale(0);opacity:0}}
+.cell.matched{animation:gemPop 0.45s ease forwards}
+@keyframes gemPop{0%{transform:scale(1);opacity:1}25%{transform:scale(1.4);opacity:1}60%{transform:scale(1.6);opacity:0.7}100%{transform:scale(0);opacity:0}}
 
-/* Swap animation */
-.cell.slide-left{animation:slideLeft 0.2s ease}
-.cell.slide-right{animation:slideRight 0.2s ease}
-.cell.slide-up{animation:slideUp 0.2s ease}
-.cell.slide-down{animation:slideDown 0.2s ease}
-@keyframes slideLeft{from{transform:translateX(-50px)}to{transform:translateX(0)}}
-@keyframes slideRight{from{transform:translateX(50px)}to{transform:translateX(0)}}
-@keyframes slideUp{from{transform:translateY(-50px)}to{transform:translateY(0)}}
-@keyframes slideDown{from{transform:translateY(50px)}to{transform:translateY(0)}}
-
-/* Drop animation */
-.cell.dropping{animation:gemDrop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
-@keyframes gemDrop{from{transform:translateY(-50px);opacity:0}to{transform:translateY(0);opacity:1}}
+.cell.drop-anim{animation:gemDrop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes gemDrop{from{transform:translateY(-60px);opacity:0}to{transform:translateY(0);opacity:1}}
 
 /* Floating score */
-.float-score{position:fixed;pointer-events:none;z-index:30;font-weight:900;font-size:1.2em;opacity:0;transition:all 0.5s ease-out;text-shadow:0 0 15px currentColor}
-
-/* Combo text */
+.float-score{position:fixed;pointer-events:none;z-index:30;font-weight:900;font-size:1.3em;opacity:0;transition:all 0.5s ease-out;text-shadow:0 0 20px currentColor}
 .combo-text{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);font-size:2.5em;font-weight:900;color:#ffd700;pointer-events:none;z-index:25;animation:comboAnim 0.9s ease forwards;text-shadow:0 0 30px rgba(255,215,0,0.5)}
 @keyframes comboAnim{0%{opacity:1;transform:translate(-50%,-50%) scale(0.3)}25%{transform:translate(-50%,-50%) scale(1.4)}100%{opacity:0;transform:translate(-50%,-80%) scale(0.8)}}
 
-/* Particles canvas */
 #particleCanvas{position:fixed;inset:0;pointer-events:none;z-index:20}
 
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:8px;padding:10px;background:rgba(0,0,0,0.4);backdrop-filter:blur(10px);flex-wrap:wrap}
@@ -71,9 +65,6 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear
 .overlay-card p{color:#888;font-size:0.85em;margin:4px 0}
 .btn{background:linear-gradient(135deg,#e040fb,#7c4dff);border:none;color:#fff;padding:12px 30px;border-radius:25px;font-size:1em;font-weight:700;cursor:pointer;margin-top:10px;transition:transform 0.2s}
 .btn:active{transform:scale(0.95)}
-
-/* Sound toggle */
-.sound-btn{position:fixed;top:8px;right:12px;z-index:15;background:none;border:none;color:rgba(255,255,255,0.3);font-size:1em;cursor:pointer}
 </style>
 </head>
 <body>
@@ -97,7 +88,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear
 
 <div class="overlay" id="levelOverlay" style="display:none">
   <div class="overlay-card">
-    <h1>🎊 Level {level} Selesai!</h1>
+    <h1>🎊 Level Selesai!</h1>
     <p>Score: <span id="levelScore">0</span></p>
     <p>Moves sisa: <span id="movesLeft">0</span></p>
     <button class="btn" onclick="nextLevel()">Lanjut Level</button>
@@ -116,7 +107,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear
 
 <script>
 // ══════════════════════════════════════════════
-// GEM MATCH v3 — Satisfying Match-3
+// GEM MATCH v4 — 3D Balls + Satisfying Swap
 // ══════════════════════════════════════════════
 
 const pCanvas=document.getElementById('particleCanvas');
@@ -126,11 +117,18 @@ resizeP();window.addEventListener('resize',resizeP);
 
 const COLS=7,ROWS=8;
 const GEMS=['🔴','🟢','🔵','🟡','🟣','🟠'];
-const GEM_COLORS={'🔴':'#ff1744','🟢':'#00e676','🔵':'#2979ff','🟡':'#ffea00','🟣':'#d500f9','🟠':'#ff9100'};
+const GEM_COLORS={
+  '🔴':{base:'#ff1744',light:'#ff6b7a',dark:'#c00020'},
+  '🟢':{base:'#00e676',light:'#4cff9a',dark:'#00a854'},
+  '🔵':{base:'#2979ff',light:'#6da0ff',dark:'#0051cc'},
+  '🟡':{base:'#ffd600',light:'#ffe54e',dark:'#c4a000'},
+  '🟣':{base:'#d500f9',light:'#e040fb',dark:'#a000c0'},
+  '🟠':{base:'#ff9100',light:'#ffb74d',dark:'#cc7400'},
+};
 const TARGETS=[500,1200,2000,3500,5000,7500,10000,15000,20000,30000];
 
 let grid,selected,previewMatches,score,level,movesLeft,busy,zen,comboCount;
-let particles=[],soundCtx=null,soundOn=true,firstTap=true;
+let particles=[],soundCtx=null,soundOn=true;
 
 // ——— Audio
 function initAudio(){try{if(!soundCtx)soundCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}
@@ -189,7 +187,6 @@ function init(){
     }
   }
   selected=null;previewMatches=[];busy=false;
-  if(firstTap)initAudio();
   render();
 }
 
@@ -200,11 +197,15 @@ function render(){
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
     const cell=document.createElement('div');cell.className='cell';
     if(grid[r][c]){
-      cell.textContent=grid[r][c];
-      cell.style.background=grid[r][c]?'rgba(255,255,255,0.06)':'transparent';
+      const gc=GEM_COLORS[grid[r][c]];
+      cell.style.background=`radial-gradient(circle at 35% 35%, ${gc.light}, ${gc.base} 40%, ${gc.dark} 100%)`;
+      cell.style.boxShadow=`0 4px 10px rgba(0,0,0,0.3), inset 0 -2px 4px rgba(0,0,0,0.2), inset 0 2px 4px rgba(255,255,255,0.15)`;
+      // Highlight/gloss
+      const gloss=document.createElement('div');
+      gloss.style.cssText='position:absolute;top:15%;left:22%;width:35%;height:30%;background:radial-gradient(ellipse,rgba(255,255,255,0.5),transparent);border-radius:50%;pointer-events:none';
+      cell.appendChild(gloss);
     }else{
-      cell.style.background='transparent';cell.style.cursor='default';
-      cell.style.boxShadow='none';
+      cell.classList.add('empty');
     }
     if(selected&&selected.r===r&&selected.c===c)cell.classList.add('selected');
     if(previewMatches.some(m=>m.r===r&&m.c===c))cell.classList.add('preview-match');
@@ -222,7 +223,7 @@ function updateTarget(){
 // ——— Core Gameplay
 function tapCell(r,c){
   if(busy||!grid[r][c])return;
-  if(firstTap){initAudio();firstTap=false;}
+  if(!soundCtx)initAudio();
 
   if(!selected){
     selected={r,c};previewMatches=[];sndTap();
@@ -235,7 +236,6 @@ function tapCell(r,c){
 
   const dr=Math.abs(selected.r-r),dc=Math.abs(selected.c-c);
   if((dr===1&&dc===0)||(dr===0&&dc===1)){
-    // Preview what would match
     showSwapPreview(selected.r,selected.c,r,c);
   }else{
     selected={r,c};previewMatches=[];sndTap();
@@ -244,45 +244,50 @@ function tapCell(r,c){
 }
 
 function showSwapPreview(r1,c1,r2,c2){
-  // Try swap, find matches, show preview
   const tmp=grid[r1][c1];grid[r1][c1]=grid[r2][c2];grid[r2][c2]=tmp;
   const matches=findMatches();
-  // Swap back
   grid[r2][c2]=grid[r1][c1];grid[r1][c1]=tmp;
 
   if(matches.length>0){
-    // Show match preview
-    previewMatches=matches;
-    render();
-
-    // After brief preview, execute the swap
+    previewMatches=matches;render();
     setTimeout(()=>{
       selected=null;previewMatches=[];
       executeSwap(r1,c1,r2,c2,matches);
     },400);
   }else{
-    // No match - just swap, no points
-    selected=null;previewMatches=[];
-    render();
+    selected=null;previewMatches=[];render();
   }
 }
 
 function executeSwap(r1,c1,r2,c2,matches){
-  busy=true;
-  const tmp=grid[r1][c1];grid[r1][c1]=grid[r2][c2];grid[r2][c2]=tmp;
+  busy=true;comboCount=0;
+  const deltaX=c2-c1,deltaY=r2-r1;
+  const cellSize=55; // approximate cell size including gap
+
+  // Animate swap — physically move cells
+  const cells=document.querySelectorAll('.cell');
+  const c1El=cells[r1*COLS+c1];
+  const c2El=cells[r2*COLS+c2];
+
+  if(c1El)c1El.style.transform=`translate(${deltaX*cellSize}px, ${deltaY*cellSize}px)`;
+  if(c2El)c2El.style.transform=`translate(${-deltaX*cellSize}px, ${-deltaY*cellSize}px)`;
+  c1El&&(c1El.style.transition='transform 0.25s cubic-bezier(0.34,1.56,0.64,1)');
+  c2El&&(c2El.style.transition='transform 0.25s cubic-bezier(0.34,1.56,0.64,1)');
   sndSwap();
 
-  // Animate swap
-  render();
-  const cells=document.querySelectorAll('.cell');
-  if(cells[r1*COLS+c1])cells[r1*COLS+c1].style.transform='translateX('+((c2-c1)*55)+'px) translateY('+((r2-r1)*55)+'px)';
-  if(cells[r2*COLS+c2])cells[r2*COLS+c2].style.transform='translateX('+((c1-c2)*55)+'px) translateY('+((r1-r2)*55)+'px)';
-
+  // After swap animation — update grid data and show them in new positions
   setTimeout(()=>{
+    const tmp=grid[r1][c1];grid[r1][c1]=grid[r2][c2];grid[r2][c2]=tmp;
     if(!zen){movesLeft--;document.getElementById('moves').textContent=zen?'∞':movesLeft;}
-    comboCount=0;
-    animateMatchChain(matches);
-  },200);
+
+    // Render showing balls in NEW positions (swap completed visually)
+    render();
+
+    // Brief pause so player sees the swapped result
+    setTimeout(()=>{
+      animateMatchChain(matches);
+    },300);
+  },280);
 }
 
 function animateMatchChain(matches){
@@ -292,78 +297,60 @@ function animateMatchChain(matches){
   document.getElementById('score').textContent=score;
   updateTarget();
 
-  // Sound based on match size
   if(matches.length>=5)sndBig();
   else if(comboCount>1)sndCombo();
   else sndMatch();
 
   if(comboCount>1)showComboText(comboCount);
 
-  // Particle burst at center of matches
-  const cx=matches.reduce((s,m)=>s+m.c,0)/matches.length;
-  const cy=matches.reduce((s,m)=>s+m.r,0)/matches.length;
-  const centermost=matches.reduce((best,m)=>Math.abs(m.c-cx)+Math.abs(m.r-cy)<Math.abs(best.c-cx)+Math.abs(best.r-cy)?m:best);
-  const gemColor=GEM_COLORS[grid[centermost.r][centermost.c]]||'#fff';
+  // Center of match for particles
+  const centermost=matches.reduce((b,m)=>m.r===b.r&&m.c===b.c?b:matches[Math.floor(matches.length/2)]);
+  const gemColor=GEM_COLORS[grid[centermost.r][centermost.c]||'🔴'].base;
+
   const cellEls=document.querySelectorAll('.cell');
   const centerCell=cellEls[centermost.r*COLS+centermost.c];
   if(centerCell){
     const rect=centerCell.getBoundingClientRect();
     spawnParticles(rect.left+rect.width/2,rect.top+rect.height/2,20,gemColor,100);
-
-    // Show floating score
     showFloat(rect.left+rect.width/2,rect.top,'+'+pts,comboCount>1?'#ffea00':'#e040fb');
   }
 
-  // Animate match rings on each cell
+  // Ring + pop animation for each matched cell
   let ringColors=['#ffd700','#ff6b6b','#48dbfb','#ff9ff3','#54a0ff','#5f27cd'];
   matches.forEach((m,i)=>{
     const cell=cellEls[m.r*COLS+m.c];
-    if(cell){
-      // Create ring
-      const ring=document.createElement('div');
-      ring.className='match-ring';
-      const color=ringColors[i%ringColors.length];
-      ring.style.border=`3px solid ${color}`;
-      ring.style.left=(cell.offsetWidth/2-12)+'px';
-      ring.style.top=(cell.offsetHeight/2-12)+'px';
-      ring.style.background=`radial-gradient(circle, ${color}33 0%, transparent 70%)`;
-      cell.appendChild(ring);
+    if(!cell)return;
+    const color=ringColors[i%ringColors.length];
+    const ring=document.createElement('div');
+    ring.className='match-ring';
+    ring.style.border=`3px solid ${color}`;
+    ring.style.background=`radial-gradient(circle, ${color}33 0%, transparent 70%)`;
+    cell.appendChild(ring);
 
-      // Add matched class after ring animation starts
-      setTimeout(()=>{
-        cell.classList.add('matched');
-        spawnParticles(
-          cell.getBoundingClientRect().left+cell.getBoundingClientRect().width/2,
-          cell.getBoundingClientRect().top+cell.getBoundingClientRect().height/2,
-          5,color,40);
-      },300);
-    }
+    setTimeout(()=>{
+      cell.classList.add('matched');
+      const r=cell.getBoundingClientRect();
+      spawnParticles(r.left+r.width/2,r.top+r.height/2,6,color,35);
+    },250);
   });
 
-  // Remove matched gems after animation
+  // Remove from grid after animation
   setTimeout(()=>{
     matches.forEach(m=>{grid[m.r][m.c]=null;});
     render();
-
-    // Apply gravity: gems fall to fill gaps
     setTimeout(()=>{
       dropGems();
       render();
-
-      // Check for chain matches
       setTimeout(()=>{
         const chain=findMatches();
-        if(chain.length>0){
-          animateMatchChain(chain);
-        }else{
-          busy=false;
-          checkLevel();
+        if(chain.length>0)animateMatchChain(chain);
+        else{
+          busy=false;checkLevel();
           if(!zen&&movesLeft<=0&&!hasValidMoves())showGameOver();
-          if(comboCount===1&&!hasValidMoves())hintMove();
         }
       },300);
     },200);
-  },700);
+  },600);
 }
 
 function dropGems(){
@@ -380,18 +367,16 @@ function dropGems(){
 
 function findMatches(){
   const matched=new Set();
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS-2;c++){
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS-2;c++)
     if(grid[r][c]&&grid[r][c]===grid[r][c+1]&&grid[r][c]===grid[r][c+2]){
       let end=c+2;while(end+1<COLS&&grid[r][end+1]===grid[r][c])end++;
       for(let i=c;i<=end;i++)matched.add(r*COLS+i);
     }
-  }
-  for(let c=0;c<COLS;c++)for(let r=0;r<ROWS-2;r++){
+  for(let c=0;c<COLS;c++)for(let r=0;r<ROWS-2;r++)
     if(grid[r][c]&&grid[r][c]===grid[r+1][c]&&grid[r][c]===grid[r+2][c]){
       let end=r+2;while(end+1<ROWS&&grid[end+1][c]===grid[r][c])end++;
       for(let i=r;i<=end;i++)matched.add(i*COLS+c);
     }
-  }
   return [...matched].map(i=>({r:Math.floor(i/COLS),c:i%COLS}));
 }
 
@@ -416,12 +401,11 @@ function hasValidMoves(){
 
 function checkLevel(){
   const target=TARGETS[Math.min(level-1,TARGETS.length-1)];
-  if(score>=target){sndWin();showLevelUp();}
-}
-function showLevelUp(){
-  document.getElementById('levelScore').textContent=score;
-  document.getElementById('movesLeft').textContent=movesLeft;
-  document.getElementById('levelOverlay').style.display='flex';
+  if(score>=target){sndWin();
+    document.getElementById('levelScore').textContent=score;
+    document.getElementById('movesLeft').textContent=movesLeft;
+    document.getElementById('levelOverlay').style.display='flex';
+  }
 }
 function nextLevel(){
   document.getElementById('levelOverlay').style.display='none';
@@ -479,14 +463,12 @@ function showComboText(n){
 function showFloat(x,y,text,color){
   const el=document.createElement('div');el.className='float-score';
   el.textContent=text;el.style.color=color;el.style.left=x+'px';el.style.top=y+'px';
-  el.style.textShadow=`0 0 15px ${color}`;document.body.appendChild(el);
+  el.style.textShadow=`0 0 20px ${color}`;document.body.appendChild(el);
   requestAnimationFrame(()=>{el.style.opacity='1';el.style.transform='translateY(-30px)';});
   setTimeout(()=>{el.style.opacity='0';el.style.transform='translateY(-50px)';setTimeout(()=>el.remove(),500);},500);
 }
 
-// Sound toggle
 document.addEventListener('touchstart',()=>{if(!soundCtx)initAudio();},{once:true});
-
 init();
 </script>
 </body>
