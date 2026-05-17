@@ -147,11 +147,12 @@ function spawnParticles(x,y,count,color,spread=80){
   }
 }
 function updateParticles(){
-  particles=p=>{
+  particles=particles.filter(p=>{
     p.x+=p.vx;p.y+=p.vy;p.vy+=0.08;p.life--;return p.life>0;
   });
 }
 function drawParticles(){
+  updateParticles();
   pCtx.clearRect(0,0,pCanvas.width,pCanvas.height);
   particles.forEach(p=>{
     const a=p.life/p.maxLife;
