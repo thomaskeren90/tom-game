@@ -22,7 +22,7 @@ canvas{display:block;margin:0 auto}
 .powerup-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7em;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1)}
 .powerup-icon.active{border-color:#00e676;box-shadow:0 0 8px rgba(0,230,118,0.3)}
 .pause-btn{position:fixed;top:56px;right:12px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#fff;font-size:0.8em;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px)}
-.exit-btn{position:fixed;top:56px;right:52px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#ff5252;font-size:0.9em;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px);font-weight:700}
+.exit-btn{position:fixed;top:56px;right:52px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#ff5252;font-size:0.9em;display:flex;align-items:center;justify-content:center;z-index:30;pointer-events:auto;cursor:pointer;backdrop-filter:blur(4px);font-weight:700}
 
 .zone-name{position:fixed;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.2);font-size:0.65em;pointer-events:none;z-index:10;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
 
@@ -86,7 +86,7 @@ canvas{display:block;margin:0 auto}
   </div>
 </div>
 <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
-<button class="exit-btn" id="exitBtn" onclick="exitGame()">✕</button>
+<button class="exit-btn" id="exitBtn" onclick="exitGame()" style="display:none">✕</button>
 <canvas id="c"></canvas>
 <div class="zone-name" id="zoneName">🏙️ Jalanan Jakarta</div>
 <div class="milestone" id="milestone"></div>
@@ -96,10 +96,11 @@ canvas{display:block;margin:0 auto}
   <div class="tutorial-card">
     <h2>🎮 Cara Main</h2>
     <div class="tutorial-step"><div class="icon">👈👉</div><p>Geser kiri/kanan untuk ganti jalur</p></div>
-    <div class="tutorial-step"><div class="icon">👆</div><p>Geser ke atas untuk lompat</p></div>
-    <div class="tutorial-step"><div class="icon">👇</div><p>Geser ke bawah untuk slide (menunduk)</p></div>
-    <div class="tutorial-step"><div class="icon">🪙</div><p>Kumpulin koin buat unlock karakter!</p></div>
-    <div class="tutorial-step"><div class="icon">🛡️⚡🧲</div><p>Ambil power-up: Shield, 2x Koin, Magnet!</p></div>
+    <div class="tutorial-step"><div class="icon">👆</div><p>Geser ke atas untuk <b>Lompat</b> — hindari rintangan rendah</p></div>
+    <div class="tutorial-step"><div class="icon">👇</div><p>Geser ke bawah untuk <b>Slide</b> — hindari rintangan tinggi</p></div>
+    <div class="tutorial-step"><div class="icon">🪙</div><p>Kumpulin koin buat unlock karakter keren!</p></div>
+    <div class="tutorial-step"><div class="icon">🛡️</div><p><b>Shield</b> — blok 1 tabrakan | ⚡ <b>2x Koin</b> | 🧲 <b>Magnet</b> tarik koin</p></div>
+    <div class="tutorial-step"><div class="icon">🌍</div><p>5 zona: Jakarta → Kalimantan → Bali → Bromo → Luar Angkasa</p></div>
     <button class="tutorial-btn" onclick="closeTutorial()">🔥 Mulai Lari!</button>
   </div>
 </div>
@@ -113,6 +114,7 @@ canvas{display:block;margin:0 auto}
     <p class="sub">Geser buat gerak • Kumpulin koin • Hindari rintangan</p>
     <div class="char-select" id="charSelect"></div>
     <button class="btn" onclick="startGame()">🏃 Lari!</button>
+    <button class="btn btn-secondary" onclick="showHowToPlay()" style="background:linear-gradient(135deg,#555,#777);margin-top:6px;font-size:0.85em">📖 Cara Main</button>
   </div>
 </div>
 
@@ -320,15 +322,30 @@ function showMilestone(text) {
 }
 
 // ————— Game loop —————
+function showHowToPlay() {
+  document.getElementById('tutorialOverlay').style.display = 'flex';
+  document.querySelector('.tutorial-btn').textContent = '🔙 Kembali';
+  document.querySelector('.tutorial-btn').onclick = function() {
+    document.getElementById('tutorialOverlay').style.display = 'none';
+    document.querySelector('.tutorial-btn').textContent = '🔥 Mulai Lari!';
+    document.querySelector('.tutorial-btn').onclick = closeTutorial;
+  };
+}
+
 function startGame() {
   closeTutorial();
   document.getElementById('menuOverlay').style.display = 'none';
   document.getElementById('gameOverOverlay').style.display = 'none';
   init();
   if (!hasSeenTutorial && !document.getElementById('tutorialOverlay').style.display) {
+    // Show tutorial first only on very first visit
     document.getElementById('tutorialOverlay').style.display = 'flex';
+    document.querySelector('.tutorial-btn').textContent = '🔥 Mulai Lari!';
+    document.querySelector('.tutorial-btn').onclick = closeTutorial;
   } else {
     gameRunning = true;
+    // Hide exit button during gameplay, show it when returning to menu
+    document.getElementById('exitBtn').style.display = 'block';
     requestAnimationFrame(loop);
   }
 }
@@ -355,6 +372,7 @@ function exitGame() {
   document.getElementById('menuOverlay').style.display = 'flex';
   document.getElementById('gameOverOverlay').style.display = 'none';
   document.getElementById('pauseBtn').textContent = '⏸';
+  document.getElementById('exitBtn').style.display = 'none';
   renderCharSelect();
 }
 
